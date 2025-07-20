@@ -1,4 +1,4 @@
-# Google Ads Driver
+# Google Ads Reports Helper
 
 A Python ETL driver for Google Ads API data extraction and transformation. Simplifies the process of extracting Google Ads data and converting it to pandas DataFrames.
 
@@ -17,7 +17,7 @@ A Python ETL driver for Google Ads API data extraction and transformation. Simpl
 ## Installation
 
 ```bash
-pip install google-ads-drv
+pip install google-ads-reports
 ```
 
 ## Quick Start
@@ -32,6 +32,11 @@ client_id: "YOUR_CLIENT_ID"
 client_secret: "YOUR_CLIENT_SECRET"
 refresh_token: "YOUR_REFRESH_TOKEN"
 ```
+References:\
+https://developers.google.com/google-ads/api/docs/get-started/introduction
+https://developers.google.com/google-ads/api/docs/get-started/dev-token
+https://developers.google.com/workspace/guides/create-credentials#service-account
+
 
 ### 2. Basic usage
 
@@ -163,8 +168,8 @@ setup_logging(level=logging.DEBUG)  # Enable debug logging
 For development installation:
 
 ```bash
-git clone https://github.com/your-username/google-ads-drv
-cd google-ads-drv
+git clone https://github.com/machado000/google-ads-reports
+cd google-ads-reports
 pip install -e ".[dev]"
 ```
 
@@ -174,8 +179,8 @@ MIT License. See [LICENSE](LICENSE) file for details.
 
 ## Support
 
-- [Documentation](https://github.com/your-username/google-ads-drv#readme)
-- [Issues](https://github.com/your-username/google-ads-drv/issues)
+- [Documentation](https://github.com/machado000/google-ads-reports#readme)
+- [Issues](https://github.com/machado000/google-ads-reports/issues)
 - [Examples](examples/)
 
 ## Contributing
