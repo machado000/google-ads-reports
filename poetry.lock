@@ -1021,9 +1021,8 @@ zstd = ["zstandard (>=0.18.0)"]
 
 [extras]
 dev = ["pytest"]
-examples = ["tqdm"]
 
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.9,<3.13"
-content-hash = "14758a10f6d2ed9f6c0d6c60b7f216f1d4d55d3dbfcc9a412dae380d661f22e8"
+content-hash = "eeff8a2b21f56098c417576734c2959011f0bf904a07615f309079543956c58e"
