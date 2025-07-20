@@ -15,7 +15,7 @@ classifiers = [
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.10", 
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Software Development :: Libraries :: Python Modules",
@@ -26,8 +26,6 @@ classifiers = [
 dependencies = [
     "google-ads>=24.0.0",
     "pandas>=2.0.0",
-    "SQLAlchemy>=2.0.0",
-    "psycopg2-binary>=2.9.0",
     "python-dotenv>=1.0.0",
     "PyYAML>=6.0.0",
     "tqdm>=4.65.0",
@@ -36,7 +34,9 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0.0",
-    "testcontainers[postgresql]>=4.0.0",
+]
+examples = [
+    "tqdm>=4.65.0",
 ]
 
 [project.urls]
@@ -45,7 +45,7 @@ Documentation = "https://github.com/your-username/google-ads-drv#readme"
 Issues = "https://github.com/your-username/google-ads-drv/issues"
 
 [tool.poetry]
-packages = [{ include = "google_ads_drv"}]
+packages = [{ include = "google_ads_drv", from = "src" }]
 
 [build-system]
 requires = ["poetry-core"]
