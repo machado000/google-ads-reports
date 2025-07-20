@@ -1,12 +1,12 @@
 [project]
-name = "google-ads-drv"
+name = "google-ads-reports"
 version = "0.1.0"
-description = "ETL driver module for Google Ads API data extraction and transformation"
+description = "ETL module for Google Ads API data extraction and transformation"
 authors = [{ name = "Joao Brito"}]
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.9,<3.13"
-keywords = ["google-ads", "pandas", "etl", "data-extraction"]
+keywords = ["google-ads", "pandas", "etl", "data-extraction", "reports"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -40,12 +40,12 @@ examples = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/your-username/google-ads-drv"
-Documentation = "https://github.com/your-username/google-ads-drv#readme"
-Issues = "https://github.com/your-username/google-ads-drv/issues"
+Homepage = "https://github.com/your-username/google-ads-reports"
+Documentation = "https://github.com/your-username/google-ads-reports#readme"
+Issues = "https://github.com/your-username/google-ads-reports/issues"
 
 [tool.poetry]
-packages = [{ include = "google_ads_drv", from = "src" }]
+packages = [{ include = "google_ads_reports", from = "src" }]
 
 [build-system]
 requires = ["poetry-core"]
