@@ -40,9 +40,9 @@ examples = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/your-username/google-ads-reports"
-Documentation = "https://github.com/your-username/google-ads-reports#readme"
-Issues = "https://github.com/your-username/google-ads-reports/issues"
+Homepage = "https://github.com/machado000/google-ads-reports"
+Documentation = "https://github.com/machado000/google-ads-reports#readme"
+Issues = "https://github.com/machado000/google-ads-reports/issues"
 
 [tool.poetry]
 packages = [{ include = "google_ads_reports", from = "src" }]
