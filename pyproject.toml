@@ -1,6 +1,6 @@
 [project]
 name = "google-ads-reports"
-version = "0.1.0"
+version = "1.0"
 description = "ETL module for Google Ads API data extraction and transformation"
 authors = [{ name = "Joao Brito"}]
 readme = "README.md"
@@ -8,7 +8,7 @@ license = { text = "MIT" }
 requires-python = ">=3.9,<3.13"
 keywords = ["google-ads", "pandas", "etl", "data-extraction", "reports"]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
     "Intended Audience :: Information Technology",
     "License :: OSI Approved :: MIT License",
@@ -20,7 +20,6 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: Internet :: WWW/HTTP :: Dynamic Content",
-    "Topic :: Office/Business :: Financial",
     "Typing :: Typed"
 ]
 dependencies = [
@@ -34,9 +33,6 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0.0",
-]
-examples = [
-    "tqdm>=4.65.0",
 ]
 
 [project.urls]
