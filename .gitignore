@@ -203,6 +203,7 @@ __marimo__/
 .streamlit/secrets.toml
 
 # User custom files
+reports_output
 secrets/
 temp/
 *.csv
