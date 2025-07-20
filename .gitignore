@@ -204,5 +204,6 @@ __marimo__/
 
 # User custom files
 secrets/
+*.csv
 *.pypirc
 draft*
