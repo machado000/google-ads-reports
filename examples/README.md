@@ -73,6 +73,26 @@ python examples/custom_reports.py
 - Custom WHERE clauses
 - Dynamic report configurations
 
+---
+
+### 4. `error_handling.py`
+**Purpose**: Demonstrates proper error handling and recovery patterns
+**What it does**:
+- Shows different types of exceptions that can occur
+- Demonstrates retry behavior for transient errors
+- Provides recommended error handling patterns
+
+**Usage**:
+```bash
+python examples/error_handling.py
+```
+
+**Key concepts covered**:
+- Custom exception types
+- Retry logic for API errors
+- Error recovery strategies
+- Best practices for error handling
+
 ## Configuration
 
 ### Customer ID
@@ -133,6 +153,50 @@ end_date = today.date()
 ```
 
 ## Troubleshooting
+
+### Exception Types
+
+The package provides specific exception types for different error scenarios:
+
+- **`AuthenticationError`**: Invalid credentials or authentication failures
+- **`ValidationError`**: Invalid input parameters (customer ID, dates, etc.)
+- **`APIError`**: Google Ads API errors (after retries)
+- **`DataProcessingError`**: DataFrame conversion or data processing failures
+- **`ConfigurationError`**: Configuration file or setup issues
+
+### Error Handling Pattern
+
+```python
+from google_ads_drv import (
+    GAdsReport, AuthenticationError, ValidationError, 
+    APIError, DataProcessingError, ConfigurationError
+)
+
+try:
+    # Your code here
+    df = gads_client.get_gads_report(...)
+    
+except AuthenticationError as e:
+    print(f"Authentication failed: {e.message}")
+    # Check credentials and retry
+    
+except ValidationError as e:
+    print(f"Invalid input: {e.message}")
+    # Fix input parameters
+    
+except APIError as e:
+    print(f"API error (after retries): {e.message}")
+    # Log error, try different approach
+```
+
+### Retry Behavior
+
+The package automatically retries transient API errors with:
+- **Max attempts**: 3 (configurable)
+- **Base delay**: 1 second
+- **Backoff factor**: 2x
+- **Max delay**: 30 seconds
+- **Jitter**: Random variation to prevent thundering herd
 
 ### Common Issues
 

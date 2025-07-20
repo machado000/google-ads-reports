@@ -5,10 +5,12 @@ This example shows how to extract multiple types of reports
 and save them in an organized directory structure.
 """
 import logging
+import os
 from datetime import date, timedelta
+from dotenv import load_dotenv
 # from pathlib import Path
 
-from src.google_ads_drv import (
+from google_ads_drv import (
     GAdsReport, GAdsReportModel, load_credentials, setup_logging,
     create_output_directory, format_report_filename
 )
@@ -30,7 +32,8 @@ def extract_multiple_reports():
     gads_client = GAdsReport(credentials)
 
     # Configuration
-    customer_id = "1234567890"  # Replace with your actual customer ID
+    load_dotenv
+    customer_id = os.getenv("CUSTOMER_ID") or "1234567890"  # Replace with your actual customer ID
     start_date = date.today() - timedelta(days=30)  # Last 30 days
     end_date = date.today() - timedelta(days=1)     # Until yesterday
 

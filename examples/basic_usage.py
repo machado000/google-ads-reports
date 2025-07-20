@@ -4,16 +4,12 @@ Basic Google Ads Report Example
 This example demonstrates the basic usage of the google-ads-drv package
 to extract data from Google Ads API and export it to CSV.
 """
-
 import logging
 import os
 from datetime import date, timedelta
 from dotenv import load_dotenv
 
-from google_ads_drv import GAdsReport, GAdsReportModel, load_credentials, setup_logging, format_report_filename
-
-# Load environment variables from .env file
-load_dotenv()
+from google_ads_drv import GAdsReport, GAdsReportModel, format_report_filename, load_credentials, setup_logging
 
 
 def main():
@@ -23,15 +19,17 @@ def main():
     # Load credentials from the default location
     try:
         credentials = load_credentials()  # Will look in secrets/google-ads.yaml by default
-    except FileNotFoundError:
+    except Exception as e:
         logging.error("Could not find Google Ads credentials file. Please ensure you have "
                       "a google-ads.yaml file in the secrets/ directory or specify the path.")
+        logging.error(f"Error: {e}")
         return
 
     # Initialize the Google Ads client
     gads_client = GAdsReport(credentials)
 
     # Configuration
+    load_dotenv
     customer_id = os.getenv("CUSTOMER_ID") or "1234567890"  # Replace with your actual customer ID
     start_date = date.today() - timedelta(days=7)  # Last 7 days
     end_date = date.today() - timedelta(days=1)    # Until yesterday
@@ -53,8 +51,8 @@ def main():
         output_filename = format_report_filename(
             customer_id=customer_id,
             report_name=report_model['report_name'],
-            start_date=start_date.strftime('%Y%m%d'),
-            end_date=end_date.strftime('%Y%m%d')
+            start_date=start_date.isoformat(),
+            end_date=end_date.isoformat()
         )
         df.to_csv(output_filename, index=False)
 
