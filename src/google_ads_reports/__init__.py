@@ -10,7 +10,7 @@ from .exceptions import (
     AuthenticationError,
     ConfigurationError,
     DataProcessingError,
-    GoogleAdsDriverError,
+    GAdsReportError,
     ValidationError,
 )
 from .models import GAdsReportModel, create_custom_report
@@ -36,7 +36,7 @@ __all__ = [
     "create_output_directory",
     "format_report_filename",
     # Exceptions
-    "GoogleAdsDriverError",
+    "GAdsReportError",
     "AuthenticationError",
     "ValidationError",
     "APIError",
