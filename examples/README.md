@@ -167,7 +167,7 @@ The package provides specific exception types for different error scenarios:
 ### Error Handling Pattern
 
 ```python
-from google_ads_drv import (
+from google_ads_reports import (
     GAdsReport, AuthenticationError, ValidationError, 
     APIError, DataProcessingError, ConfigurationError
 )
@@ -215,7 +215,7 @@ setup_logging(level=logging.DEBUG)
 
 ### Check Available Reports
 ```python
-from google_ads_drv import GAdsReportModel
+from google_ads_reports import GAdsReportModel
 
 # List all available reports
 reports = GAdsReportModel.list_available_reports()

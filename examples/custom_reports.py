@@ -7,7 +7,7 @@ and use them with the Google Ads driver.
 import logging
 from datetime import date, timedelta
 
-from google_ads_drv import GAdsReport, create_custom_report, load_credentials, setup_logging
+from google_ads_reports import GAdsReport, create_custom_report, load_credentials, setup_logging
 
 
 def create_campaign_performance_report():

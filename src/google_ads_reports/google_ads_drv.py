@@ -7,8 +7,8 @@ the new modules.
 
 DEPRECATED: This module is kept for backward compatibility.
 Please use the new modular imports:
-- from google_ads_drv.client import GAdsReport
-- from google_ads_drv.models import GAdsReportModel
+- from google_ads_reports.client import GAdsReport
+- from google_ads_reports.models import GAdsReportModel
 """
 import warnings
 
@@ -19,8 +19,8 @@ from .utils import setup_logging
 
 # Show deprecation warning
 warnings.warn(
-    "Direct import from google_ads_drv.google_ads_drv is deprecated. "
-    "Please use 'from google_ads_drv import GAdsReport, GAdsReportModel' instead.",
+    "Direct import from google_ads_reports.google_ads_drv is deprecated. "
+    "Please use 'from google_ads_reports import GAdsReport, GAdsReportModel' instead.",
     DeprecationWarning,
     stacklevel=2
 )

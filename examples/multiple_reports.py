@@ -10,7 +10,7 @@ from datetime import date, timedelta
 from dotenv import load_dotenv
 # from pathlib import Path
 
-from google_ads_drv import (
+from google_ads_reports import (
     GAdsReport, GAdsReportModel, load_credentials, setup_logging,
     create_output_directory, format_report_filename
 )

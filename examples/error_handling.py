@@ -7,7 +7,7 @@ that can occur when using the google-ads-drv package.
 import logging
 from datetime import date, timedelta
 
-from google_ads_drv import (
+from google_ads_reports import (
     APIError,
     AuthenticationError,
     ConfigurationError,

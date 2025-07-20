@@ -37,7 +37,7 @@ refresh_token: "YOUR_REFRESH_TOKEN"
 
 ```python
 from datetime import date, timedelta
-from google_ads_drv import GAdsReport, GAdsReportModel, load_credentials
+from google_ads_reports import GAdsReport, GAdsReportModel, load_credentials
 
 # Load credentials
 credentials = load_credentials()
@@ -74,7 +74,7 @@ df.to_csv("keyword_report.csv", index=False)
 Create custom report configurations:
 
 ```python
-from google_ads_drv import create_custom_report
+from google_ads_reports import create_custom_report
 
 custom_report = create_custom_report(
     report_name="campaign_performance",
@@ -98,8 +98,9 @@ df = client.get_gads_report(customer_id, custom_report, start_date, end_date)
 The package provides specific exception types for different scenarios:
 
 ```python
-from google_ads_drv import (
-    AuthenticationError,
+from google_ads_reports import (
+    GAdsReport, 
+    AuthenticationError, 
     ValidationError, 
     APIError,
     DataProcessingError,
@@ -144,7 +145,7 @@ API calls automatically retry on transient errors with configurable settings:
 Configure logging level:
 
 ```python
-from google_ads_drv import setup_logging
+from google_ads_reports import setup_logging
 import logging
 
 setup_logging(level=logging.DEBUG)  # Enable debug logging
