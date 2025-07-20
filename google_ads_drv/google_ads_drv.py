@@ -6,18 +6,16 @@ Google Ads (GAds) and transform the request result to an dataframe object
 https://developers.google.com/google-ads/api/reference/rpc/v20/overview
 v.20250715
 """
-
 import logging
 import os
+import pandas as pd
 import socket
 import yaml
 from datetime import date, datetime, timedelta  # noqa
-from pandas import DataFrame, concat, json_normalize
 
 from google.ads.googleads.client import GoogleAdsClient
 from google.ads.googleads.errors import GoogleAdsException
-from google.ads.googleads.v20.services.types.google_ads_service import SearchGoogleAdsResponse
-from google.protobuf import json_format
+from google.protobuf.json_format import MessageToDict
 
 
 # Set timeout for all http connections
@@ -34,7 +32,7 @@ def test() -> None:
 
     customer_id = "6587578899"  # Veros Hospital Verterinário Account
 
-    report_model = GAdsReportModel.assetgroup_report
+    report_model = GAdsReportModel.adgroup_ad_report
 
     with open(os.path.join("secrets", "google-ads.yaml"), "r") as f:
         secret = yaml.safe_load(f)
@@ -60,8 +58,8 @@ class GAdsReport:
 
     Methods:
     - __init__(self, client_secret): Initializes the GAdsReport instance.
-    - create_query_string(self, report_model, start_date, end_date): Creates a query string for the Google Ads API.
-    - convert_response_to_df(self, response, report_model): Converts the API response to a Pandas DataFrame.
+    - _build_gads_query(self, report_model, start_date, end_date): Creates a query string for the Google Ads API.
+    - _convert_response_to_df(self, response, report_model): Converts the API response to a Pandas DataFrame.
     - get_gads_report(self, customer_id, report_model, start_date, end_date): Retrieves GAds report data.
     """
 
@@ -86,7 +84,7 @@ class GAdsReport:
         # Create a Google Ads API service client
         self.service = self.client.get_service("GoogleAdsService", version="v20")
 
-    def create_query_string(self, report_model: dict, start_date: date, end_date: date) -> str:
+    def _build_gads_query(self, report_model: dict, start_date: date, end_date: date) -> str:
         """
         Creates a query string for the Google Ads API.
 
@@ -118,46 +116,131 @@ class GAdsReport:
 
         return query_str
 
-    def convert_response_to_df(self, response: SearchGoogleAdsResponse, report_model: dict) -> DataFrame:
+    def _get_google_ads_response(self, customer_id: str, report_model: dict, start_date: date, end_date: date) -> dict:
         """
-        Converts the API response to a Pandas DataFrame.
+        Retrieves GAds report data using GoogleAdsClient().get_service().search() .
 
         Parameters:
-        - response: The Google Ads API response.
+        - customer_id (str): The customer ID for Google Ads.
         - report_model (dict): The report model specifying dimensions, metrics, etc.
+        - start_date (date): Start date for the report.
+        - end_date (date): End date for the report.
+
+        Returns:
+        - dict: GAds report data dict containing keys `results`, `totalResultsCount`, and `fieldMask`.
+        """
+
+        # Display request parameters
+        print(f"Trying to get '{report_model['report_name']}' with {format(type(self.service).__name__)}()",
+              "\n[ Request parameters ]",
+              f"Customer_id: {customer_id}",
+              f"Report_model: {report_model['report_name']}",
+              f"Date range: from {start_date.isoformat()} to {end_date.isoformat()}",
+              "",
+              sep="\n")
+
+        query_str = self._build_gads_query(report_model, start_date, end_date)
+        # logging.info(query_str:)  # DEBUG
+
+        search_request = self.client.get_type("SearchGoogleAdsRequest")
+        search_request.customer_id = customer_id
+        search_request.query = query_str
+        search_request.search_settings.return_total_results_count = True
+        # search_request.page_size = 100 # Deprecated in API v17, default as 10_000
+        # logging.info(search_request:) # DEBUG only
+
+        full_response_dict = {
+            "results": [],
+            "totalResultsCount": 0,
+            "fieldMask": "",
+        }
+
+        # Execute the query and retrieve the results
+        try:
+            # Execute the query to fetch the first page of data
+            logging.info("Executing search request...")
+            response = self.service.search(search_request)
+
+            # Check if response has headers and results
+            if hasattr(response, "field_mask") and response.total_results_count > 0:
+                while True:
+                    response_dict = MessageToDict(response._pb)
+                    page_results = response_dict.get("results", [])
+                    full_response_dict["results"].extend(page_results)
+
+                    logging.info(f"Request returned {len(page_results)}/{response.total_results_count} rows")
+
+                    if response.next_page_token == "":
+                        logging.info("Response has no next_page_token")
+                        break
+                    else:
+                        logging.info(f"Executing search request with next_page_token: {response.next_page_token=}")
+                        search_request.page_token = response.next_page_token
+                        response = self.service.search(search_request)
+
+                full_response_dict["totalResultsCount"] = response.total_results_count
+                full_response_dict["fieldMask"] = response_dict.get("fieldMask", "")
+
+                logging.info(f"Finished fetching full report with {len(full_response_dict["results"])} rows \n")
+
+            else:
+                logging.info("Report has no 'results' with requested parameters\n")
+
+            return full_response_dict
+
+        except GoogleAdsException as e:
+            logging.error("Google Ads Exception", e)
+            raise
+
+    def _convert_response_to_df(self, response: dict, report_model: dict) -> pd.DataFrame:
+        """
+        Converts the Google Ads API protobuf response 'MessageToDict(response._pb)' to dataFrame.
+
+        Parameters:
+        - response: The Google Ads API response in protobuf dict format.
+        - report_model (dict): The custom report model specifying dimensions to guide dataframe schema.
 
         Returns:
         - DataFrame: Pandas DataFrame containing GAds report data.
         """
-        response_data = []
+
+        # response_data = []
 
         # Iterate through the response results
-        for result in response.results:
-            data = {}
+        # for result in response.results:
+        #     data = {}
 
-            for field in report_model["select"]:
-                # Split the field string into segments
-                field_segments = field.split(".")
-                value = result
+        #     for field in report_model["select"]:
+        #         # Split the field string into segments
+        #         field_segments = field.split(".")
+        #         value = result
 
-                # Traverse through the segments to access the value
-                for segment in field_segments:
-                    if hasattr(value, segment):
-                        value = getattr(value, segment, None)
-                    else:
-                        value = None
-                        break
+        #         # Traverse through the segments to access the value
+        #         for segment in field_segments:
+        #             if hasattr(value, segment):
+        #                 value = getattr(value, segment, None)
+        #             else:
+        #                 value = None
+        #                 break
 
-                data[field] = value
+        #         data[field] = value
 
-            response_data.append(data)
+        #     response_data.append(data)
 
         # Create a DataFrame from the response data
-        result_df = DataFrame(response_data)
+        result_df = pd.json_normalize(response["results"])
+
+        columns_to_drop = [col for col in result_df.columns if ".resourceName" in col]
+
+        result_df = result_df.drop(columns=columns_to_drop)
+        result_df = result_df.loc[result_df["metrics.impressions"] != 0]
+        result_df = result_df.fillna("")
+        result_df.columns = [col.replace(".", "_").replace("segments_", "").replace(
+            "adGroupCriterion_", "").replace("metrics_", "") for col in result_df.columns]
 
         return result_df
 
-    def get_gads_report(self, customer_id: str, report_model: dict, start_date: date, end_date: date) -> DataFrame:
+    def get_gads_report(self, customer_id: str, report_model: dict, start_date: date, end_date: date) -> pd.DataFrame:
         """
         Retrieves GAds report data using GoogleAdsClient().get_service().search() .
 
@@ -170,65 +253,14 @@ class GAdsReport:
         Returns:
         - DataFrame: Pandas DataFrame containing GAds report data.
         """
-        # Display request parameters
-        print(f"Trying to get '{report_model['report_name']}' with {format(type(self.service).__name__)}()",
-              "\n[ Request parameters ]",
-              f"Customer_id: {customer_id}",
-              f"Report_model: {report_model['report_name']}",
-              f"Date range: from {start_date.isoformat()} to {end_date.isoformat()}",
-              "",
-              sep="\n")
 
-        query_str = self.create_query_string(report_model, start_date, end_date)
-        # logging.info(query_str:)  # DEBUG
+        response = self._get_google_ads_response(customer_id, report_model, start_date, end_date)
 
-        search_request = self.client.get_type("SearchGoogleAdsRequest")
-        search_request.customer_id = customer_id
-        search_request.query = query_str
-        search_request.search_settings.return_total_results_count = True
-        # logging.info(search_request:) # DEBUG only
+        result_df = self._convert_response_to_df(response, report_model)
 
-        df = DataFrame()
+        return result_df
 
-        # Execute the query and retrieve the results
-        try:
-            # Execute the query to fetch the first page of data
-            response = self.service.search(search_request)
-            # Check if response has headers and results
-            if hasattr(response, "field_mask") and len(response.results) > 0:
-                while True:
-                    response_dict = json_format.MessageToDict(response)
-                    report_page_df = json_normalize(response_dict, record_path=["results"])
-
-                    df = concat([df, report_page_df], ignore_index=True)
-                    logging.info(f"Returned {df.shape[0]}/{response.total_results_count} rows")
-
-                    # logging.info(response.next_page_token:)
-                    if response.next_page_token == "":
-                        break
-                    else:
-                        search_request.page_token = response.next_page_token
-                        response = self.service.search(search_request)
-
-                columns_to_drop = [col for col in df.columns if ".resourceName" in col]
-                df = df.drop(columns=columns_to_drop)
-
-                # df = df.loc[df["metrics.impressions"] != 0]
-                # df = df.fillna("")
-                df.columns = [col.replace(".", "_").replace("segments_", "").replace(
-                    "adGroupCriterion_", "").replace("metrics_", "") for col in df.columns]
-
-                logging.info(f"Finish fetching full report with {df.shape[0]} rows \n")
-
-            else:
-                logging.info("Report has no 'results' with requested parameters\n")
-
-            return df
-
-        except GoogleAdsException as e:
-            logging.error("Google Ads Exception", e)
-            raise
-
+    # Alias to maintain compatibility with previous versions
     get_default_report = get_gads_report
 
 
