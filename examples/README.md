@@ -1,0 +1,175 @@
+# Google Ads Driver Examples
+
+This directory contains example scripts demonstrating how to use the `google-ads-drv` package to extract data from the Google Ads API.
+
+## Prerequisites
+
+Before running any examples, ensure you have:
+
+1. **Google Ads API credentials** configured in `secrets/google-ads.yaml`
+2. **Valid customer ID** for your Google Ads account
+3. **Required dependencies** installed (see `requirements.txt` or `pyproject.toml`)
+
+## Example Scripts
+
+### 1. `basic_usage.py`
+**Purpose**: Demonstrates the fundamental usage pattern
+**What it does**:
+- Loads credentials from the default location
+- Extracts a single report (adgroup_ad_report) 
+- Saves the data to CSV
+- Shows basic report information
+
+**Usage**:
+```bash
+python examples/basic_usage.py
+```
+
+**Key concepts covered**:
+- Basic client initialization
+- Simple report extraction
+- CSV export
+- Error handling
+
+---
+
+### 2. `multiple_reports.py`
+**Purpose**: Shows how to extract multiple report types efficiently
+**What it does**:
+- Extracts several different report types
+- Creates organized directory structure
+- Generates standardized filenames
+- Provides detailed extraction summary
+
+**Usage**:
+```bash
+python examples/multiple_reports.py
+```
+
+**Key concepts covered**:
+- Batch report extraction
+- Directory management
+- Filename standardization
+- Progress reporting
+- Error handling for multiple operations
+
+---
+
+### 3. `custom_reports.py`
+**Purpose**: Demonstrates creating custom report configurations
+**What it does**:
+- Creates custom report models with specific fields
+- Shows how to add WHERE clauses and custom ordering
+- Demonstrates the `create_custom_report()` function
+
+**Usage**:
+```bash
+python examples/custom_reports.py
+```
+
+**Key concepts covered**:
+- Custom report model creation
+- Field selection and filtering
+- Custom WHERE clauses
+- Dynamic report configurations
+
+## Configuration
+
+### Customer ID
+Replace the placeholder customer ID (`"1234567890"`) in each example with your actual Google Ads customer ID.
+
+### Date Ranges
+Examples use relative date ranges (last 7 days, last 30 days, etc.). Modify the `start_date` and `end_date` variables to suit your needs.
+
+### Credentials Location
+By default, examples look for credentials in `secrets/google-ads.yaml`. To use a different location:
+
+```python
+# Specify custom path
+credentials = load_credentials("/path/to/your/google-ads.yaml")
+```
+
+## Common Modifications
+
+### Change Output Format
+```python
+# Save as JSON instead of CSV
+df.to_json("report.json", orient="records", indent=2)
+
+# Save as Parquet
+df.to_parquet("report.parquet")
+
+# Save as Excel
+df.to_excel("report.xlsx", index=False)
+```
+
+### Add Data Filtering
+```python
+# Filter data after extraction
+filtered_df = df[df['impressions'] > 1000]
+
+# Or add filters to the report model
+custom_report = create_custom_report(
+    report_name="high_impression_campaigns",
+    select=["campaign.name", "metrics.impressions", "metrics.clicks"],
+    from_table="campaign",
+    where="metrics.impressions > 1000"
+)
+```
+
+### Custom Date Ranges
+```python
+from datetime import date
+
+# Specific date range
+start_date = date(2024, 1, 1)
+end_date = date(2024, 1, 31)
+
+# This month
+from datetime import datetime
+today = datetime.now()
+start_date = today.replace(day=1).date()
+end_date = today.date()
+```
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Import Errors**: Make sure the package is installed or you're running from the correct directory
+2. **Credential Errors**: Verify your `google-ads.yaml` file exists and has correct format
+3. **API Errors**: Check your customer ID and API access permissions
+4. **Empty Results**: Some reports may return no data for certain date ranges or accounts
+
+### Debug Mode
+Enable debug logging to see detailed API interactions:
+
+```python
+import logging
+setup_logging(level=logging.DEBUG)
+```
+
+### Check Available Reports
+```python
+from google_ads_drv import GAdsReportModel
+
+# List all available reports
+reports = GAdsReportModel.list_available_reports()
+print("Available reports:", reports)
+
+# Get details of a specific report
+report_details = GAdsReportModel.get_report_by_name("keyword_report")
+print("Keyword report fields:", report_details["select"])
+```
+
+## Next Steps
+
+After trying these examples:
+
+1. **Modify** existing examples to match your specific use case
+2. **Create** your own custom report models
+3. **Integrate** the extraction logic into your data pipeline
+4. **Explore** advanced features like data validation and transformation
+5. **Schedule** regular extractions using cron or task schedulers
+
+For more advanced usage, check the main package documentation.
