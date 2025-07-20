@@ -5,13 +5,21 @@ This package provides tools for extracting, transforming, and loading Google Ads
 using the Google Ads API with pandas DataFrame outputs.
 """
 from .client import GAdsReport
+from .exceptions import (
+    APIError,
+    AuthenticationError,
+    ConfigurationError,
+    DataProcessingError,
+    GoogleAdsDriverError,
+    ValidationError,
+)
 from .models import GAdsReportModel, create_custom_report
 from .utils import (
+    create_output_directory,
+    format_report_filename,
     load_credentials,
     setup_logging,
     validate_customer_id,
-    create_output_directory,
-    format_report_filename
 )
 
 __version__ = "0.1.0"
@@ -27,4 +35,11 @@ __all__ = [
     "validate_customer_id",
     "create_output_directory",
     "format_report_filename",
+    # Exceptions
+    "GoogleAdsDriverError",
+    "AuthenticationError",
+    "ValidationError",
+    "APIError",
+    "DataProcessingError",
+    "ConfigurationError",
 ]

@@ -6,12 +6,14 @@ This module contains the main GAdsReport class for interacting with the Google A
 import logging
 import socket
 from datetime import date, datetime
-from typing import Dict, Any
+from typing import Any, Dict
 
 import pandas as pd
 from google.ads.googleads.client import GoogleAdsClient
-from google.ads.googleads.errors import GoogleAdsException
 from google.protobuf.json_format import MessageToDict
+
+from .exceptions import AuthenticationError, DataProcessingError, ValidationError
+from .retry import retry_on_api_error
 
 # Set timeout for all http connections
 TIMEOUT_IN_SEC = 60 * 3  # seconds timeout limit
@@ -39,7 +41,17 @@ class GAdsReport:
 
         Parameters:
         - client_secret (dict): The YAML configuration for authentication.
+
+        Raises:
+        - AuthenticationError: If credentials are invalid or authentication fails
+        - ValidationError: If client_secret format is invalid
         """
+        if not isinstance(client_secret, dict):
+            raise ValidationError("client_secret must be a dictionary")
+
+        if not client_secret:
+            raise ValidationError("client_secret cannot be empty")
+
         try:
             # Initialize the Google Ads API client
             self.client = GoogleAdsClient.load_from_dict(client_secret, version="v20")
@@ -48,11 +60,21 @@ class GAdsReport:
             logging.info("Successful client authentication using Google Ads API (GAds)")
 
         except Exception as e:
-            logging.error(f"An exception of type {type(e).__name__} occurred", exc_info=True)
-            raise Exception
+            logging.error(f"Authentication failed: {e}", exc_info=True)
+            raise AuthenticationError(
+                "Failed to authenticate with Google Ads API",
+                original_error=e
+            ) from e
 
-        # Create a Google Ads API service client
-        self.service = self.client.get_service("GoogleAdsService", version="v20")
+        try:
+            # Create a Google Ads API service client
+            self.service = self.client.get_service("GoogleAdsService", version="v20")
+        except Exception as e:
+            logging.error(f"Failed to create Google Ads service: {e}", exc_info=True)
+            raise AuthenticationError(
+                "Failed to create Google Ads API service",
+                original_error=e
+            ) from e
 
     def _build_gads_query(self, report_model: Dict[str, Any], start_date: date, end_date: date) -> str:
         """
@@ -86,6 +108,7 @@ class GAdsReport:
 
         return query_str
 
+    @retry_on_api_error(max_attempts=3, base_delay=1.0)
     def _get_google_ads_response(self, customer_id: str, report_model: Dict[str, Any],
                                  start_date: date, end_date: date) -> Dict[str, Any]:
         """
@@ -99,7 +122,17 @@ class GAdsReport:
 
         Returns:
         - dict: GAds report data dict containing keys `results`, `totalResultsCount`, and `fieldMask`.
+
+        Raises:
+        - ValidationError: If input parameters are invalid
+        - APIError: If Google Ads API request fails
         """
+        # Validate inputs
+        if not customer_id or not isinstance(customer_id, str):
+            raise ValidationError("customer_id must be a non-empty string")
+
+        if not isinstance(report_model, dict) or 'report_name' not in report_model:
+            raise ValidationError("report_model must be a dict with 'report_name' key")
 
         # Display request parameters
         print("\n[ Request parameters ]",
@@ -110,7 +143,14 @@ class GAdsReport:
               "",
               sep="\n")
 
-        query_str = self._build_gads_query(report_model, start_date, end_date)
+        try:
+            query_str = self._build_gads_query(report_model, start_date, end_date)
+        except Exception as e:
+            raise ValidationError(
+                "Failed to build query string",
+                original_error=e,
+                report_model=report_model.get('report_name', 'unknown')
+            ) from e
         # logging.info(query_str:)  # DEBUG
 
         search_request = self.client.get_type("SearchGoogleAdsRequest")
@@ -127,14 +167,15 @@ class GAdsReport:
         }
 
         # Execute the query and retrieve the results
-        try:
-            # Execute the query to fetch the first page of data
-            logging.info("Executing search request...")
-            response = self.service.search(search_request)
+        # Note: The retry decorator will handle GoogleAdsException retries
+        # Execute the query to fetch the first page of data
+        logging.info("Executing search request...")
+        response = self.service.search(search_request)
 
-            # Check if response has headers and results
-            if hasattr(response, "field_mask") and response.total_results_count > 0:
-                while True:
+        # Check if response has headers and results
+        if hasattr(response, "field_mask") and response.total_results_count > 0:
+            while True:
+                try:
                     response_dict = MessageToDict(response._pb)
                     page_results = response_dict.get("results", [])
                     full_response_dict["results"].extend(page_results)
@@ -149,19 +190,22 @@ class GAdsReport:
                         search_request.page_token = response.next_page_token
                         response = self.service.search(search_request)
 
-                full_response_dict["totalResultsCount"] = response.total_results_count
-                full_response_dict["fieldMask"] = response_dict.get("fieldMask", "")
+                except Exception as e:
+                    raise DataProcessingError(
+                        "Failed to process API response pagination",
+                        original_error=e,
+                        customer_id=customer_id
+                    ) from e
 
-                logging.info(f"Finished fetching full report with {len(full_response_dict['results'])} rows")
+            full_response_dict["totalResultsCount"] = response.total_results_count
+            full_response_dict["fieldMask"] = response_dict.get("fieldMask", "")
 
-            else:
-                logging.info("Report has no 'results' with requested parameters\n")
+            logging.info(f"Finished fetching full report with {len(full_response_dict['results'])} rows")
 
-            return full_response_dict
+        else:
+            logging.info("Report has no 'results' with requested parameters")
 
-        except GoogleAdsException as e:
-            logging.error("Google Ads Exception", e)
-            raise
+        return full_response_dict
 
     def _convert_response_to_df(self, response: Dict[str, Any], report_model: Dict[str, Any]) -> pd.DataFrame:
         """
@@ -173,20 +217,45 @@ class GAdsReport:
 
         Returns:
         - DataFrame: Pandas DataFrame containing GAds report data.
+
+        Raises:
+        - DataProcessingError: If DataFrame conversion fails
         """
+        try:
+            if not response or "results" not in response:
+                raise DataProcessingError("Response is empty or missing 'results' key")
 
-        # Create a DataFrame from the response data
-        result_df = pd.json_normalize(response["results"])
+            if not response["results"]:
+                logging.info("No results returned, creating empty DataFrame")
+                return pd.DataFrame()
 
-        columns_to_drop = [col for col in result_df.columns if ".resourceName" in col]
+            # Create a DataFrame from the response data
+            result_df = pd.json_normalize(response["results"])
 
-        result_df = result_df.drop(columns=columns_to_drop)
-        result_df = result_df.loc[result_df["metrics.impressions"] != 0]
-        result_df = result_df.fillna("")
-        result_df.columns = [col.replace(".", "_").replace("segments_", "").replace(
-            "adGroupCriterion_", "").replace("metrics_", "") for col in result_df.columns]
+            # Drop resource name columns
+            columns_to_drop = [col for col in result_df.columns if ".resourceName" in col]
+            if columns_to_drop:
+                result_df = result_df.drop(columns=columns_to_drop)
 
-        return result_df
+            # Filter out rows with zero impressions (configurable behavior)
+            if "metrics.impressions" in result_df.columns:
+                result_df = result_df.loc[result_df["metrics.impressions"] != 0]
+
+            # Fill NaN values
+            result_df = result_df.fillna("")
+
+            # Rename columns for better readability
+            result_df.columns = [col.replace(".", "_").replace("segments_", "").replace(
+                "adGroupCriterion_", "").replace("metrics_", "") for col in result_df.columns]
+
+            return result_df
+
+        except Exception as e:
+            raise DataProcessingError(
+                "Failed to convert API response to DataFrame",
+                original_error=e,
+                report_name=report_model.get('report_name', 'unknown')
+            ) from e
 
     def get_gads_report(self, customer_id: str, report_model: Dict[str, Any],
                         start_date: date, end_date: date) -> pd.DataFrame:

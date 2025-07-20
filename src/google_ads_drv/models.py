@@ -3,7 +3,7 @@ Google Ads report models module.
 
 This module contains pre-configured report models for different types of Google Ads reports.
 """
-from typing import Dict, List, Any, Optional
+from typing import Any, Dict, List, Optional
 
 
 class GAdsReportModel:

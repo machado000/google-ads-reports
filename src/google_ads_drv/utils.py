@@ -1,11 +1,14 @@
 """
 Utility functions for the Google Ads driver module.
 """
-import os
 import logging
-import yaml
-from typing import Dict, Any, Optional
+import os
 from pathlib import Path
+from typing import Any, Dict, Optional
+
+import yaml
+
+from .exceptions import ConfigurationError, ValidationError
 
 
 def load_credentials(config_path: Optional[str] = None) -> Dict[str, Any]:
@@ -38,12 +41,31 @@ def load_credentials(config_path: Optional[str] = None) -> Dict[str, Any]:
         if os.path.exists(path):
             try:
                 with open(path, "r") as f:
-                    return yaml.safe_load(f)
+                    credentials = yaml.safe_load(f)
+
+                if not credentials:
+                    raise ConfigurationError(f"Credentials file {path} is empty")
+
+                if not isinstance(credentials, dict):
+                    raise ConfigurationError(f"Credentials file {path} must contain a YAML dictionary")
+
+                return credentials
+
             except yaml.YAMLError as e:
                 logging.error(f"Error parsing YAML file {path}: {e}")
-                raise
+                raise ConfigurationError(
+                    f"Invalid YAML format in credentials file {path}",
+                    original_error=e
+                ) from e
+            except IOError as e:
+                raise ConfigurationError(
+                    f"Failed to read credentials file {path}",
+                    original_error=e
+                ) from e
 
-    raise FileNotFoundError(f"Could not find credentials file in any of these locations: {paths_to_try}")
+    raise ConfigurationError(
+        f"Could not find credentials file in any of these locations: {paths_to_try}"
+    )
 
 
 def setup_logging(level: int = logging.INFO,
@@ -78,14 +100,20 @@ def validate_customer_id(customer_id: str) -> str:
         str: Formatted customer ID (without dashes)
 
     Raises:
-        ValueError: If customer ID format is invalid
+        ValidationError: If customer ID format is invalid
     """
+    if not customer_id:
+        raise ValidationError("Customer ID cannot be empty")
+
+    if not isinstance(customer_id, str):
+        raise ValidationError("Customer ID must be a string")
+
     # Remove dashes and whitespace
     clean_id = customer_id.replace("-", "").replace(" ", "")
 
     # Check if it's numeric and has correct length (typically 10 digits)
     if not clean_id.isdigit():
-        raise ValueError(f"Customer ID must be numeric, got: {customer_id}")
+        raise ValidationError(f"Customer ID must be numeric, got: {customer_id}")
 
     if len(clean_id) != 10:
         logging.warning(f"Customer ID length is {len(clean_id)}, expected 10: {customer_id}")
