@@ -9,7 +9,8 @@ import os
 from datetime import date, timedelta
 from dotenv import load_dotenv
 
-from google_ads_reports import GAdsReport, GAdsReportModel, format_report_filename, load_credentials, setup_logging
+from google_ads_reports import GAdsReport, GAdsReportModel
+from google_ads_reports import create_output_directory, format_report_filename, load_credentials, setup_logging
 
 
 def main():
@@ -54,7 +55,11 @@ def main():
             start_date=start_date.isoformat(),
             end_date=end_date.isoformat()
         )
-        df.to_csv(output_filename, index=False)
+
+        # Save to file
+        output_dir = create_output_directory("reports_output")
+        file_path = output_dir / output_filename
+        df.to_csv(file_path, index=False)
 
         logging.info(f"Report saved to {output_filename}")
         logging.info(f"Report contains {len(df)} rows and {len(df.columns)} columns")
@@ -64,7 +69,7 @@ def main():
         print(f"- Rows: {len(df)}")
         print(f"- Columns: {len(df.columns)}")
         print(f"- Date range: {start_date} to {end_date}")
-        print(f"- Output file: {output_filename}")
+        print(f"- Output file: {file_path}")
 
         # Show column names
         print("\nColumns:")
