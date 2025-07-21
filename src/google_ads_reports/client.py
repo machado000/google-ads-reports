@@ -6,7 +6,7 @@ This module contains the main GAdsReport class for interacting with the Google A
 import logging
 import socket
 from datetime import date, datetime
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import pandas as pd
 from google.ads.googleads.client import GoogleAdsClient
@@ -22,17 +22,32 @@ socket.setdefaulttimeout(TIMEOUT_IN_SEC)
 
 class GAdsReport:
     """
-    GAdsReport class is designed to interact with the Google Ads API,
-    enabling the extraction of data and transformation into a Pandas DataFrame.
+    GAdsReport class for interacting with the Google Ads API v20.
+
+    This class enables extraction of Google Ads data and transformation into optimized
+    Pandas DataFrames ready for database storage. It provides comprehensive data type
+    optimization, configurable missing value handling, and character encoding cleanup.
 
     Parameters:
-    - client_secret (dict): The YAML configuration for authentication.
+        client_secret (Dict[str, Any]): Google Ads API authentication configuration
 
     Methods:
-    - __init__(self, client_secret): Initializes the GAdsReport instance.
-    - _build_gads_query(self, report_model, start_date, end_date): Creates a query string for the Google Ads API.
-    - _convert_response_to_df(self, response, report_model): Converts the API response to a Pandas DataFrame.
-    - get_gads_report(self, customer_id, report_model, start_date, end_date): Retrieves GAds report data.
+        get_gads_report: Main method to retrieve and process Google Ads report data
+        get_default_report: Alias for get_gads_report (backward compatibility)
+
+    Private Methods:
+        _build_gads_query: Constructs GAQL queries for the Google Ads API
+        _get_google_ads_response: Executes API requests with retry logic and pagination
+        _convert_response_to_df: Converts protobuf responses to Pandas DataFrames
+        _fix_data_types: Optimizes column data types (dates, dynamic metrics conversion)
+        _should_be_integer: Determines optimal numeric data type (int64 vs float64)
+        _handle_missing_values: Configurable NaN/NaT handling by column type
+        _clean_text_encoding: Cleans text columns for database compatibility
+
+    Raises:
+        AuthenticationError: Invalid credentials or authentication failure
+        ValidationError: Invalid input parameters or configuration
+        DataProcessingError: API response processing failures
     """
 
     def __init__(self, client_secret: Dict[str, Any]):
@@ -312,8 +327,8 @@ class GAdsReport:
         return False  # Has decimals, should be float
 
     def _handle_missing_values(self, df: pd.DataFrame,
-                               fill_numeric_values: str = None,
-                               fill_datetime_values: str = None,
+                               fill_numeric_values: Optional[str] = None,
+                               fill_datetime_values: Optional[str] = None,
                                fill_object_values: str = "") -> pd.DataFrame:
         """
         Handles missing values appropriately based on column types.
@@ -387,14 +402,25 @@ class GAdsReport:
         Retrieves GAds report data using GoogleAdsClient().get_service().search() .
 
         Parameters:
-        - customer_id (str): The customer ID for Google Ads.
-        - report_model (dict): The report model specifying dimensions, metrics, etc.
-        - start_date (date): Start date for the report.
-        - end_date (date): End date for the report.
-        - filter_zero_impressions (bool): Whether to filter out zero impression rows
+            customer_id (str): Google Ads customer ID
+            report_model (Dict[str, Any]): Report configuration with 'select', 'from',
+                optional 'where', 'order_by', and 'report_name' keys
+            start_date (date): Report start date (inclusive)
+            end_date (date): Report end date (inclusive)
+            filter_zero_impressions (bool): Remove rows with zero impressions.
+                Handles multiple zero formats: 0, "0", 0.0, "0.0", None, NaN
 
         Returns:
-        - DataFrame: Pandas DataFrame containing GAds report data optimized for database storage.
+            pd.DataFrame: Optimized DataFrame with:
+                - Proper data types (datetime, int64/float64 for metrics)
+                - Database-compatible column names (snake_case, no dots)
+                - Cleaned text encoding (ASCII-safe, max 255 chars)
+                - Preserved NaN/NaT for database NULL compatibility
+
+        Raises:
+            ValidationError: Invalid parameters or report model
+            AuthenticationError: API authentication failure
+            DataProcessingError: Response processing failure
         """
 
         response = self._get_google_ads_response(customer_id, report_model, start_date, end_date)
