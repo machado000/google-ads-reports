@@ -1,9 +1,0 @@
-include README.md
-include LICENSE
-include pyproject.toml
-recursive-include src *.py
-recursive-include examples *.py *.md
-recursive-exclude * __pycache__
-recursive-exclude * *.pyc
-recursive-exclude * *.pyo
-recursive-exclude * .DS_Store
