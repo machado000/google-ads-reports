@@ -1,17 +1,24 @@
 # Google Ads Reports Helper
 
-A Python ETL driver for Google Ads API data extraction and transformation. Simplifies the process of extracting Google Ads data and converting it to pandas DataFrames.
+A Python ETL driver for Google Ads API v20 data extraction and transformation. Simplifies the process of extracting Google Ads data and converting it to database-ready pandas DataFrames with comprehensive optimization features.
 
-[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![PyPI version](https://img.shields.io/pypi/v/google-ads-reports)](https://pypi.org/project/google-ads-reports/)
+[![Issues](https://img.shields.io/github/issues/machado000/google-ads-reports)](https://github.com/machado000/google-ads-reports/issues)
+[![Last Commit](https://img.shields.io/github/last-commit/machado000/google-ads-reports)](https://github.com/machado000/google-ads-reports/commits/main)
+[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/machado000/google-ads-reports/blob/main/LICENSE)
 
 ## Features
 
-- **Simple API**: Easy-to-use interface for Google Ads data extraction
+- **Google Ads API v20**: Latest API version support with full compatibility
+- **Database-Ready DataFrames**: Optimized data types and encoding for seamless database storage
+- **Smart Type Detection**: Dynamic conversion of metrics to appropriate int64/float64 types
+- **Configurable Missing Values**: Granular control over NaN/NaT handling by column type
+- **Character Encoding Cleanup**: Automatic text sanitization for database compatibility
+- **Zero Impression Filtering**: Robust filtering handling multiple zero representations
 - **Multiple Report Types**: Pre-configured report models for common use cases
-- **Custom Reports**: Create custom report configurations
-- **Robust Error Handling**: Comprehensive error handling with retry logic
-- **Pandas Integration**: Direct output to pandas DataFrames
+- **Custom Reports**: Create custom report configurations with full GAQL support
+- **Robust Error Handling**: Comprehensive error handling with retry logic and specific exceptions
+- **Pagination Support**: Automatic handling of large datasets with pagination
 - **Type Hints**: Full type hint support for better IDE experience
 
 ## Installation
@@ -53,12 +60,13 @@ customer_id = "1234567890"
 start_date = date.today() - timedelta(days=7)
 end_date = date.today() - timedelta(days=1)
 
-# Extract report data
+# Extract report data with database optimization
 df = client.get_gads_report(
     customer_id=customer_id,
     report_model=GAdsReportModel.keyword_report,
     start_date=start_date,
-    end_date=end_date
+    end_date=end_date,
+    filter_zero_impressions=True  # Remove rows with zero impressions
 )
 
 # Save to CSV
@@ -97,6 +105,43 @@ custom_report = create_custom_report(
 
 df = client.get_gads_report(customer_id, custom_report, start_date, end_date)
 ```
+
+## Database Optimization Features
+
+The package automatically optimizes DataFrames for database storage:
+
+### Data Type Optimization
+- **Automatic Date Conversion**: String dates → `datetime64[ns]`
+- **Dynamic Metrics Conversion**: Object metrics → `int64` or `float64` based on data
+- **Smart Integer Detection**: Whole numbers become `int64`, decimals become `float64`
+
+### Missing Value Handling
+- **Preserve NULL Compatibility**: NaN/NaT preserved for database NULL mapping
+- **Configurable by Type**: Different strategies for numeric, datetime, and text columns
+- **Safe Conversion**: Invalid values gracefully ignored
+
+### Character Encoding Cleanup
+- **ASCII Sanitization**: Removes non-ASCII characters for database compatibility  
+- **Null Byte Removal**: Strips problematic null bytes (`\x00`)
+- **Length Limiting**: Truncates text to 255 characters (configurable)
+- **Whitespace Trimming**: Removes leading/trailing whitespace
+
+### Zero Impression Filtering
+Handles multiple zero representations:
+```python
+df = client.get_gads_report(
+    customer_id=customer_id,
+    report_model=report_model,
+    start_date=start_date,
+    end_date=end_date,
+    filter_zero_impressions=True  # Removes: 0, "0", 0.0, "0.0", None, NaN
+)
+```
+
+### Database-Compatible Column Names
+- **Snake Case Conversion**: `metrics.impressions` → `impressions`
+- **Dot Removal**: `segments.date` → `date`  
+- **Prefix Cleanup**: `adGroupCriterion_keyword` → `keyword`
 
 ## Error Handling
 
@@ -158,10 +203,12 @@ setup_logging(level=logging.DEBUG)  # Enable debug logging
 
 ## Requirements
 
-- Python 3.9+
+- Python 3.9-3.12
+- google-ads >= 24.0.0 (Google Ads API v20 support)
 - pandas >= 2.0.0
-- google-ads >= 24.0.0
 - PyYAML >= 6.0.0
+- python-dotenv >= 1.0.0
+- tqdm >= 4.65.0
 
 ## Development
 
