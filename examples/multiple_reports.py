@@ -34,7 +34,7 @@ def extract_multiple_reports():
     # Configuration
     load_dotenv
     customer_id = os.getenv("CUSTOMER_ID") or "1234567890"  # Replace with your actual customer ID
-    start_date = date.today() - timedelta(days=30)  # Last 30 days
+    start_date = date.today() - timedelta(days=7)  # Last 30 days
     end_date = date.today() - timedelta(days=1)     # Until yesterday
 
     # Create output directory
