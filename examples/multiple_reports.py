@@ -32,7 +32,7 @@ def extract_multiple_reports():
     gads_client = GAdsReport(credentials)
 
     # Configuration
-    load_dotenv
+    load_dotenv()
     customer_id = os.getenv("CUSTOMER_ID") or "1234567890"  # Replace with your actual customer ID
     start_date = date.today() - timedelta(days=7)  # Last 30 days
     end_date = date.today() - timedelta(days=1)     # Until yesterday
@@ -55,12 +55,9 @@ def extract_multiple_reports():
             logging.info(f"Extracting {report_name}...")
 
             # Extract the data
-            df = gads_client.get_gads_report(
-                customer_id=customer_id,
-                report_model=report_model,
-                start_date=start_date,
-                end_date=end_date
-            )
+            df = gads_client.get_gads_report(customer_id, report_model,
+                                             start_date, end_date,
+                                             filter_zero_impressions=True)
 
             if df.empty:
                 logging.warning(f"{report_name} returned no data")

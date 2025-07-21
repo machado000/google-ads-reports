@@ -30,7 +30,7 @@ def main():
     gads_client = GAdsReport(credentials)
 
     # Configuration
-    load_dotenv
+    load_dotenv()
     customer_id = os.getenv("CUSTOMER_ID") or "1234567890"  # Replace with your actual customer ID
     start_date = date.today() - timedelta(days=7)  # Last 7 days
     end_date = date.today() - timedelta(days=1)    # Until yesterday
@@ -41,12 +41,9 @@ def main():
     try:
         # Extract the report data
         logging.info(f"Extracting '{report_model['report_name']}' for customer '{customer_id}'")
-        df = gads_client.get_gads_report(
-            customer_id=customer_id,
-            report_model=report_model,
-            start_date=start_date,
-            end_date=end_date
-        )
+        df = gads_client.get_gads_report(customer_id, report_model,
+                                         start_date, end_date,
+                                         filter_zero_impressions=True)
 
         # Save to CSV
         output_filename = format_report_filename(
