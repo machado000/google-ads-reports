@@ -237,17 +237,6 @@ class GAdsReport:
             if columns_to_drop:
                 result_df = result_df.drop(columns=columns_to_drop)
 
-            # Filter out rows with zero impressions (configurable behavior)
-            if "metrics.impressions" in result_df.columns:
-                result_df = result_df.loc[result_df["metrics.impressions"] != 0]
-
-            # Fill NaN values
-            result_df = result_df.fillna("")
-
-            # Rename columns for better readability
-            result_df.columns = [col.replace(".", "_").replace("segments_", "").replace(
-                "adGroupCriterion_", "").replace("metrics_", "") for col in result_df.columns]
-
             return result_df
 
         except Exception as e:
@@ -257,8 +246,143 @@ class GAdsReport:
                 report_name=report_model.get('report_name', 'unknown')
             ) from e
 
+    def _fix_data_types(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Optimizes data types for database storage.
+        """
+        try:
+            # 1. Fix date columns (these come as strings from API)
+            date_columns = [col for col in df.columns if 'date' in col]
+            for col in date_columns:
+                if col in df.columns and df[col].dtype == 'object':
+                    df[col] = pd.to_datetime(df[col], errors='raise')  # Fail fast if dates are invalid
+                    logging.info(f"Converted {col} to datetime")
+
+            # 2. Dynamically find and convert metric columns that come as 'object' but should be numeric
+            metrics_to_convert = []
+
+            # Find all columns that contain 'metrics' and are currently 'object' type
+            for col in df.columns:
+                if 'metrics' in col and df[col].dtype == 'object':
+                    metrics_to_convert.append(col)
+
+            for col in metrics_to_convert:
+                try:
+                    # First convert to numeric to see what we get
+                    numeric_series = pd.to_numeric(df[col], errors='raise')
+
+                    # Determine if it should be int or float based on the data
+                    if self._should_be_integer(numeric_series):
+                        df[col] = numeric_series.astype('int64')
+                        logging.info(f"Converted {col} from object to int64")
+                    else:
+                        df[col] = numeric_series.astype('float64')
+                        logging.info(f"Converted {col} from object to float64")
+
+                except ValueError as e:
+                    logging.warning(f"Could not convert {col} to numeric: {e}")
+                    # Keep as object type if conversion fails
+
+            return df
+
+        except Exception as e:
+            logging.error(f"Data type optimization failed: {e}")
+            return df
+
+    def _should_be_integer(self, numeric_series: pd.Series) -> bool:
+        """
+        Determines if a numeric series should be stored as integer or float.
+
+        Parameters:
+        - numeric_series: The pandas Series with numeric data
+
+        Returns:
+        - bool: True if should be integer, False if should be float
+        """
+        # Remove NaN values for analysis
+        clean_series = numeric_series.dropna()
+
+        if len(clean_series) == 0:
+            return False  # Default to float if no data
+
+        # If all values are whole numbers, use integer
+        if (clean_series % 1 == 0).all():
+            return True
+
+        return False  # Has decimals, should be float
+
+    def _handle_missing_values(self, df: pd.DataFrame,
+                               fill_numeric_values: str = None,
+                               fill_datetime_values: str = None,
+                               fill_object_values: str = "") -> pd.DataFrame:
+        """
+        Handles missing values appropriately based on column types.
+
+        Parameters:
+        - fill_numeric_values: Value to fill NaN in numeric columns (empty = preserve NaN)
+        - fill_datetime_values: Value to fill NaT in datetime columns (empty = preserve NaT)
+        - fill_object_values: Value to fill NaN in object/text columns (empty string by default)
+        """
+
+        if not fill_datetime_values and not fill_numeric_values and not fill_object_values:
+            logging.info("No fill values provided, preserving NaN/NaT for numeric and datetime columns")
+            return df
+
+        try:
+            for col in df.columns:
+                # Case 1: Numeric columns (int, float)
+                if pd.api.types.is_numeric_dtype(df[col]) and fill_numeric_values != "":
+                    try:
+                        # Attempt to convert to numeric value
+                        fill_val = float(fill_numeric_values)
+                        df[col] = df[col].fillna(fill_val)
+                    except (ValueError, TypeError):
+                        pass  # Keep NaN if conversion fails
+
+                # Case 2: Datetime columns
+                elif pd.api.types.is_datetime64_any_dtype(df[col]) and fill_datetime_values != "":
+                    try:
+                        # Attempt to convert to datetime
+                        fill_datetime = pd.to_datetime(fill_datetime_values, errors='raise')
+                        df[col] = df[col].fillna(fill_datetime)
+                    except (ValueError, TypeError, pd.errors.ParserError):
+                        pass  # Keep NaT if conversion fails
+
+                # Case 3: Object columns (text, categorical)
+                elif pd.api.types.is_object_dtype(df[col]) and fill_object_values != "":
+                    # Always fill object columns with the specified value
+                    df[col] = df[col].fillna(fill_object_values)
+
+            return df
+
+        except Exception as e:
+            logging.warning(f"Missing value handling failed: {e}")
+            return df
+
+    def _clean_text_encoding(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Cleans text columns for character encoding issues.
+        """
+        try:
+            for col in df.select_dtypes(include=['object']).columns:
+                if df[col].dtype == 'object':
+                    # Handle common encoding issues
+                    df[col] = df[col].astype(str)
+                    # Remove or replace problematic characters
+                    df[col] = df[col].str.replace(r'[^\x00-\x7F]+', '', regex=True)  # Remove non-ASCII
+                    df[col] = df[col].str.replace('\x00', '', regex=False)  # Remove null bytes
+                    df[col] = df[col].str.strip()  # Remove leading/trailing whitespace
+                    # Limit string length for database compatibility (adjust as needed)
+                    df[col] = df[col].str[:255]
+            return df
+
+        except Exception as e:
+            logging.warning(f"Character encoding cleanup failed: {e}")
+            return df
+
     def get_gads_report(self, customer_id: str, report_model: Dict[str, Any],
-                        start_date: date, end_date: date) -> pd.DataFrame:
+                        start_date: date, end_date: date,
+                        filter_zero_impressions: bool = True) -> pd.DataFrame:
         """
         Retrieves GAds report data using GoogleAdsClient().get_service().search() .
 
@@ -267,14 +391,36 @@ class GAdsReport:
         - report_model (dict): The report model specifying dimensions, metrics, etc.
         - start_date (date): Start date for the report.
         - end_date (date): End date for the report.
+        - filter_zero_impressions (bool): Whether to filter out zero impression rows
 
         Returns:
-        - DataFrame: Pandas DataFrame containing GAds report data.
+        - DataFrame: Pandas DataFrame containing GAds report data optimized for database storage.
         """
 
         response = self._get_google_ads_response(customer_id, report_model, start_date, end_date)
 
         result_df = self._convert_response_to_df(response, report_model)
+
+        if not result_df.empty:
+
+            # Filter out rows with zero impressions (configurable behavior)
+            if filter_zero_impressions and "metrics.impressions" in result_df.columns:
+                # Handle multiple zero representations: 0, "0", 0.0, "0.0", None, NaN
+                mask = pd.to_numeric(result_df["metrics.impressions"], errors='coerce').fillna(0) != 0
+                result_df = result_df.loc[mask]
+
+            # 2. Essential data type fixes (dates and object metrics that should be numeric)
+            result_df = self._fix_data_types(result_df)
+
+            # 3. Handle missing values (after type conversion to preserve proper nulls for numerics)
+            result_df = self._handle_missing_values(result_df, fill_object_values="")
+
+            # 4. Clean text encoding for database compatibility
+            result_df = self._clean_text_encoding(result_df)
+
+        # 5. Rename columns for better readability (keeping your existing strategy)
+        result_df.columns = [col.replace(".", "_").replace("segments_", "").replace(
+            "adGroupCriterion_", "").replace("metrics_", "") for col in result_df.columns]
 
         return result_df
 
