@@ -22,9 +22,6 @@ from .utils import (
     validate_customer_id,
 )
 
-__version__ = "1.0"
-__author__ = "Joao Brito"
-
 # Main exports
 __all__ = [
     "GAdsReport",
