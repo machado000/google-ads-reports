@@ -43,7 +43,8 @@ def main():
         logging.info(f"Extracting '{report_model['report_name']}' for customer '{customer_id}'")
         df = gads_client.get_gads_report(customer_id, report_model,
                                          start_date, end_date,
-                                         filter_zero_impressions=True)
+                                         filter_zero_impressions=True,
+                                         column_naming="snake_case")
 
         # Save to CSV
         output_filename = format_report_filename(
