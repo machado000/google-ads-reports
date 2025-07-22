@@ -26,7 +26,8 @@ class GAdsReport:
 
     This class enables extraction of Google Ads data and transformation into optimized
     Pandas DataFrames ready for database storage. It provides comprehensive data type
-    optimization, configurable missing value handling, and character encoding cleanup.
+    optimization, configurable missing value handling, character encoding cleanup,
+    and flexible column naming conventions (snake_case or camelCase).
 
     Parameters:
         client_secret (Dict[str, Any]): Google Ads API authentication configuration
@@ -43,6 +44,7 @@ class GAdsReport:
         _should_be_integer: Determines optimal numeric data type (int64 vs float64)
         _handle_missing_values: Configurable NaN/NaT handling by column type
         _clean_text_encoding: Cleans text columns for database compatibility
+        _transform_column_names: Configurable column naming (snake_case or camelCase)
 
     Raises:
         AuthenticationError: Invalid credentials or authentication failure
@@ -271,7 +273,7 @@ class GAdsReport:
             for col in date_columns:
                 if col in df.columns and df[col].dtype == 'object':
                     df[col] = pd.to_datetime(df[col], errors='raise')  # Fail fast if dates are invalid
-                    logging.info(f"Converted {col} to datetime")
+                    logging.debug(f"Converted {col} to datetime")
 
             # 2. Dynamically find and convert metric columns that come as 'object' but should be numeric
             metrics_to_convert = []
@@ -289,10 +291,10 @@ class GAdsReport:
                     # Determine if it should be int or float based on the data
                     if self._should_be_integer(numeric_series):
                         df[col] = numeric_series.astype('int64')
-                        logging.info(f"Converted {col} from object to int64")
+                        logging.debug(f"Converted {col} from object to int64")
                     else:
                         df[col] = numeric_series.astype('float64')
-                        logging.info(f"Converted {col} from object to float64")
+                        logging.debug(f"Converted {col} from object to float64")
 
                 except ValueError as e:
                     logging.warning(f"Could not convert {col} to numeric: {e}")
@@ -395,11 +397,67 @@ class GAdsReport:
             logging.warning(f"Character encoding cleanup failed: {e}")
             return df
 
+    def _transform_column_names(self, df: pd.DataFrame, naming_convention: str = "snake_case") -> pd.DataFrame:
+        """
+        Transforms column names according to the specified naming convention.
+
+        Parameters:
+            df (pd.DataFrame): DataFrame with original column names
+            naming_convention (str):
+                - "snake_case": campaign.name → campaign_name (default)
+                - "camelCase": campaign.name → campaignName
+        Returns:
+            pd.DataFrame: DataFrame with transformed column names
+        """
+        # Validate column naming parameter
+        if naming_convention.lower() not in ["snake_case", "camelcase"]:
+            naming_convention = "snake_case"
+            logging.warning(f"Invalid column_naming '{naming_convention}'. Using 'snake_case' as default")
+
+        try:
+            if naming_convention.lower() == "snake_case":
+                # Remove prefixes and convert to snake_case
+                df.columns = [
+                    col.replace("segments.", "")
+                       .replace("adGroupCriterion.", "")
+                       .replace("metrics.", "")
+                       .replace(".", "_")
+                       .lower()
+                    for col in df.columns
+                ]
+
+            elif naming_convention.lower() == "camelcase":
+                # Remove prefixes and convert to camelCase
+                renamed_columns = []
+                for col in df.columns:
+                    # First remove the prefixes
+                    clean_col = (col.replace("segments.", "")
+                                 .replace("adGroupCriterion.", "")
+                                 .replace("metrics.", ""))
+
+                    # Then convert to camelCase by capitalizing first letter after each dot, then removing dots
+                    parts = clean_col.split(".")
+                    # Keep first part as is, capitalize first letter of subsequent parts
+                    camel_case_col = parts[0] + "".join(part.capitalize() for part in parts[1:])
+                    renamed_columns.append(camel_case_col)
+                df.columns = renamed_columns
+
+            return df
+
+        except Exception as e:
+            logging.warning(f"Column naming transformation failed: {e}")
+            return df
+
     def get_gads_report(self, customer_id: str, report_model: Dict[str, Any],
                         start_date: date, end_date: date,
-                        filter_zero_impressions: bool = True) -> pd.DataFrame:
+                        filter_zero_impressions: bool = True,
+                        column_naming: str = "snake_case") -> pd.DataFrame:
         """
-        Retrieves GAds report data using GoogleAdsClient().get_service().search() .
+        Retrieves and processes Google Ads report data with database optimization.
+
+        This method executes a Google Ads API query, processes the response through a
+        comprehensive data pipeline including type optimization, missing value handling,
+        and character encoding cleanup to produce a database-ready DataFrame.
 
         Parameters:
             customer_id (str): Google Ads customer ID
@@ -409,11 +467,14 @@ class GAdsReport:
             end_date (date): Report end date (inclusive)
             filter_zero_impressions (bool): Remove rows with zero impressions.
                 Handles multiple zero formats: 0, "0", 0.0, "0.0", None, NaN
+            column_naming (str): Column naming convention. Options:
+                - "snake_case": campaign.name → campaign_name (default)
+                - "camelCase": campaign.name → campaignName
 
         Returns:
             pd.DataFrame: Optimized DataFrame with:
                 - Proper data types (datetime, int64/float64 for metrics)
-                - Database-compatible column names (snake_case, no dots)
+                - Database-compatible column names in chosen format
                 - Cleaned text encoding (ASCII-safe, max 255 chars)
                 - Preserved NaN/NaT for database NULL compatibility
 
@@ -444,9 +505,8 @@ class GAdsReport:
             # 4. Clean text encoding for database compatibility
             result_df = self._clean_text_encoding(result_df)
 
-        # 5. Rename columns for better readability (keeping your existing strategy)
-        result_df.columns = [col.replace(".", "_").replace("segments_", "").replace(
-            "adGroupCriterion_", "").replace("metrics_", "") for col in result_df.columns]
+            # 5. Transform column names according to specified convention
+            result_df = self._transform_column_names(result_df, naming_convention=column_naming)
 
         return result_df
 
