@@ -11,6 +11,7 @@ A Python ETL driver for Google Ads API v20 data extraction and transformation. S
 
 - **Google Ads API v20**: Latest API version support with full compatibility
 - **Database-Ready DataFrames**: Optimized data types and encoding for seamless database storage
+- **Flexible Column Naming**: Choose between snake_case or camelCase column conventions
 - **Smart Type Detection**: Dynamic conversion of metrics to appropriate int64/float64 types
 - **Configurable Missing Values**: Granular control over NaN/NaT handling by column type
 - **Character Encoding Cleanup**: Automatic text sanitization for database compatibility
@@ -66,11 +67,36 @@ df = client.get_gads_report(
     report_model=GAdsReportModel.keyword_report,
     start_date=start_date,
     end_date=end_date,
-    filter_zero_impressions=True  # Remove rows with zero impressions
+    filter_zero_impressions=True,  # Remove rows with zero impressions
+    column_naming="snake_case"     # Choose column naming: "snake_case" or "camelCase"
 )
 
 # Save to CSV
 df.to_csv("keyword_report.csv", index=False)
+```
+
+### Column Naming Options
+
+Choose between snake_case (database-friendly) or camelCase (API-consistent) column names:
+
+```python
+# Snake case (default) - metrics.impressions → impressions
+df_snake = client.get_gads_report(
+    customer_id=customer_id,
+    report_model=GAdsReportModel.keyword_report,
+    start_date=start_date,
+    end_date=end_date,
+    column_naming="snake_case"  # Default
+)
+
+# CamelCase - metrics.impressions → metricsImpressions  
+df_camel = client.get_gads_report(
+    customer_id=customer_id,
+    report_model=GAdsReportModel.keyword_report,
+    start_date=start_date,
+    end_date=end_date,
+    column_naming="camelCase"
+)
 ```
 
 ## Available Report Models
@@ -138,10 +164,29 @@ df = client.get_gads_report(
 )
 ```
 
-### Database-Compatible Column Names
-- **Snake Case Conversion**: `metrics.impressions` → `impressions`
-- **Dot Removal**: `segments.date` → `date`  
-- **Prefix Cleanup**: `adGroupCriterion_keyword` → `keyword`
+### Flexible Column Naming
+Choose your preferred column naming convention:
+
+**Snake Case (Default - Database Friendly):**
+- `metrics.impressions` → `impressions`
+- `segments.date` → `date`  
+- `adGroupCriterion.keyword` → `keyword`
+
+**CamelCase (API Consistent):**
+- `metrics.impressions` → `metricsImpressions`
+- `segments.date` → `segmentsDate`
+- `adGroupCriterion.keyword` → `adGroupCriterionKeyword`
+
+```python
+# Choose naming convention
+df = client.get_gads_report(
+    customer_id=customer_id,
+    report_model=report_model,
+    start_date=start_date,
+    end_date=end_date,
+    column_naming="snake_case"  # or "camelCase"
+)
+```
 
 ## Error Handling
 

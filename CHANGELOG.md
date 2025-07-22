@@ -5,7 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.0.1] - 2025-07-21
+## [1.2.0] - 2025-07-22
+
+### Added
+- Configurable column naming conventions: snake_case (default) or camelCase
+- New `column_naming` parameter in `get_gads_report()` method
+- `_transform_column_names()` private method for flexible column transformation
+- Input validation for column naming parameter
+- Enhanced documentation with column naming examples
+
+### Enhanced
+- Updated method docstrings with new parameter descriptions
+- Added column naming examples to README.md
+- Improved class documentation to reflect new capabilities
+
+### Technical
+- Added comprehensive error handling for invalid column naming options
+- Maintains backward compatibility (snake_case remains default)
+- Graceful fallback to snake_case for invalid naming conventions
+
+## [1.1.0] - 2025-07-21
 
 ### Added
 - Database optimization features for DataFrames
