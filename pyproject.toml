@@ -1,6 +1,6 @@
 [project]
 name = "google-ads-reports"
-version = "1.2.0"
+version = "1.2.1"
 description = "ETL module for Google Ads API v20 with database-optimized DataFrame processing"
 authors = [{ name = "Joao Brito"}]
 readme = "README.md"
