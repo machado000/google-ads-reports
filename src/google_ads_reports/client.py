@@ -177,7 +177,7 @@ class GAdsReport:
         # search_request.page_size = 100 # Deprecated in API v17, default as 10_000
         # logging.info(search_request:) # DEBUG only
 
-        full_response_dict = {
+        full_response_dict: Dict[str, Any] = {
             "results": [],
             "totalResultsCount": 0,
             "fieldMask": "",
@@ -195,15 +195,18 @@ class GAdsReport:
                 try:
                     response_dict = MessageToDict(response._pb)
                     page_results = response_dict.get("results", [])
+                    # Ensure page_results is a list
+                    if not isinstance(page_results, list):
+                        page_results = [page_results]
                     full_response_dict["results"].extend(page_results)
 
                     logging.info(f"Request returned {len(page_results)}/{response.total_results_count} rows")
 
                     if response.next_page_token == "":
-                        logging.info("Response has no next_page_token")
+                        logging.debug("Response has no next_page_token")
                         break
                     else:
-                        logging.info(f"Executing search request with next_page_token: {response.next_page_token=}")
+                        logging.debug(f"Executing search request with next_page_token: '{response.next_page_token}'")
                         search_request.page_token = response.next_page_token
                         response = self.service.search(search_request)
 
@@ -217,10 +220,10 @@ class GAdsReport:
             full_response_dict["totalResultsCount"] = response.total_results_count
             full_response_dict["fieldMask"] = response_dict.get("fieldMask", "")
 
-            logging.info(f"Finished fetching full report with {len(full_response_dict['results'])} rows")
+            logging.info(f"Finished fetching full Response with {len(full_response_dict['results'])} rows")
 
         else:
-            logging.info("Report has no 'results' with requested parameters")
+            logging.info("Response has no 'results' with requested parameters")
 
         return full_response_dict
 
@@ -342,26 +345,28 @@ class GAdsReport:
         """
 
         if not fill_datetime_values and not fill_numeric_values and not fill_object_values:
-            logging.info("No fill values provided, preserving NaN/NaT for numeric and datetime columns")
+            logging.debug("No fill values provided, preserving NaN/NaT for numeric and datetime columns")
             return df
 
         try:
             for col in df.columns:
                 # Case 1: Numeric columns (int, float)
-                if pd.api.types.is_numeric_dtype(df[col]) and fill_numeric_values != "":
+                if pd.api.types.is_numeric_dtype(df[col]) and fill_numeric_values not in (None, ""):
                     try:
                         # Attempt to convert to numeric value
-                        fill_val = float(fill_numeric_values)
-                        df[col] = df[col].fillna(fill_val)
+                        if fill_numeric_values is not None:
+                            fill_val = float(fill_numeric_values)
+                            df[col] = df[col].fillna(fill_val)
                     except (ValueError, TypeError):
                         pass  # Keep NaN if conversion fails
 
                 # Case 2: Datetime columns
-                elif pd.api.types.is_datetime64_any_dtype(df[col]) and fill_datetime_values != "":
+                elif pd.api.types.is_datetime64_any_dtype(df[col]) and fill_datetime_values not in (None, ""):
                     try:
                         # Attempt to convert to datetime
-                        fill_datetime = pd.to_datetime(fill_datetime_values, errors='raise')
-                        df[col] = df[col].fillna(fill_datetime)
+                        if fill_datetime_values is not None:
+                            fill_datetime = pd.to_datetime(fill_datetime_values, errors='raise')
+                            df[col] = df[col].fillna(fill_datetime)
                     except (ValueError, TypeError, pd.errors.ParserError):
                         pass  # Keep NaT if conversion fails
 
@@ -388,6 +393,7 @@ class GAdsReport:
                     # Remove or replace problematic characters
                     df[col] = df[col].str.replace(r'[^\x00-\x7F]+', '', regex=True)  # Remove non-ASCII
                     df[col] = df[col].str.replace('\x00', '', regex=False)  # Remove null bytes
+                    df[col] = df[col].str.replace(r'[\r\n]+', ' ', regex=True)  # Remove line breaks
                     df[col] = df[col].str.strip()  # Remove leading/trailing whitespace
                     # Limit string length for database compatibility (adjust as needed)
                     df[col] = df[col].str[:255]

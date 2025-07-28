@@ -18,7 +18,7 @@ def retry_on_api_error(
     max_delay: float = 30.0,
     backoff_factor: float = 2.0,
     jitter: bool = True
-):
+) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """
     Decorator to retry function calls on transient API errors.
 
@@ -32,9 +32,9 @@ def retry_on_api_error(
     Returns:
         Decorated function with retry logic
     """
-    def decorator(func: Callable) -> Callable:
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         @wraps(func)
-        def wrapper(*args, **kwargs) -> Any:
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
             last_exception = None
 
             for attempt in range(max_attempts):

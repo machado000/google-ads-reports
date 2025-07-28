@@ -78,7 +78,7 @@ def setup_logging(level: int = logging.INFO,
         format_string (Optional[str]): Custom format string
     """
     if format_string is None:
-        format_string = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        format_string = '%(levelname)s - %(message)s'
 
     logging.basicConfig(
         level=level,
