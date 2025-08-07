@@ -93,6 +93,68 @@ class GAdsReport:
                 original_error=e
             ) from e
 
+    def get_gads_report(self, customer_id: str, report_model: Dict[str, Any],
+                        start_date: date, end_date: date,
+                        filter_zero_impressions: bool = True,
+                        column_naming: str = "snake_case") -> pd.DataFrame:
+        """
+        Retrieves and processes Google Ads report data with database optimization.
+
+        This method executes a Google Ads API query, processes the response through a
+        comprehensive data pipeline including type optimization, missing value handling,
+        and character encoding cleanup to produce a database-ready DataFrame.
+
+        Parameters:
+            customer_id (str): Google Ads customer ID
+            report_model (Dict[str, Any]): Report configuration with 'select', 'from',
+                optional 'where', 'order_by', and 'report_name' keys
+            start_date (date): Report start date (inclusive)
+            end_date (date): Report end date (inclusive)
+            filter_zero_impressions (bool): Remove rows with zero impressions.
+                Handles multiple zero formats: 0, "0", 0.0, "0.0", None, NaN
+            column_naming (str): Column naming convention. Options:
+                - "snake_case": campaign.name → campaign_name (default)
+                - "camelCase": campaign.name → campaignName
+
+        Returns:
+            pd.DataFrame: Optimized DataFrame with:
+                - Proper data types (datetime, int64/float64 for metrics)
+                - Database-compatible column names in chosen format
+                - Cleaned text encoding (ASCII-safe, max 255 chars)
+                - Preserved NaN/NaT for database NULL compatibility
+
+        Raises:
+            ValidationError: Invalid parameters or report model
+            AuthenticationError: API authentication failure
+            DataProcessingError: Response processing failure
+        """
+
+        response = self._get_google_ads_response(customer_id, report_model, start_date, end_date)
+
+        result_df = self._convert_response_to_df(response, report_model)
+
+        if not result_df.empty:
+
+            # Filter out rows with zero impressions (configurable behavior)
+            if filter_zero_impressions and "metrics.impressions" in result_df.columns:
+                # Handle multiple zero representations: 0, "0", 0.0, "0.0", None, NaN
+                mask = pd.to_numeric(result_df["metrics.impressions"], errors='coerce').fillna(0) != 0
+                result_df = result_df.loc[mask]
+
+            # 2. Essential data type fixes (dates and object metrics that should be numeric)
+            result_df = self._fix_data_types(result_df)
+
+            # 3. Handle missing values (after type conversion to preserve proper nulls for numerics)
+            result_df = self._handle_missing_values(result_df, fill_object_values="")
+
+            # 4. Clean text encoding for database compatibility
+            result_df = self._clean_text_encoding(result_df)
+
+            # 5. Transform column names according to specified convention
+            result_df = self._transform_column_names(result_df, naming_convention=column_naming)
+
+        return result_df
+
     def _build_gads_query(self, report_model: Dict[str, Any], start_date: date, end_date: date) -> str:
         """
         Creates a query string for the Google Ads API.
@@ -200,7 +262,8 @@ class GAdsReport:
                         page_results = [page_results]
                     full_response_dict["results"].extend(page_results)
 
-                    logging.info(f"Request returned {len(page_results)}/{response.total_results_count} rows")
+                    logging.info(
+                        f"Request returned {len(full_response_dict["results"])}/{response.total_results_count} rows")
 
                     if response.next_page_token == "":
                         logging.debug("Response has no next_page_token")
@@ -270,6 +333,9 @@ class GAdsReport:
         """
         Optimizes data types for database storage.
         """
+
+        df = df.copy()
+
         try:
             # 1. Fix date columns (these come as strings from API)
             date_columns = [col for col in df.columns if 'date' in col]
@@ -453,68 +519,6 @@ class GAdsReport:
         except Exception as e:
             logging.warning(f"Column naming transformation failed: {e}")
             return df
-
-    def get_gads_report(self, customer_id: str, report_model: Dict[str, Any],
-                        start_date: date, end_date: date,
-                        filter_zero_impressions: bool = True,
-                        column_naming: str = "snake_case") -> pd.DataFrame:
-        """
-        Retrieves and processes Google Ads report data with database optimization.
-
-        This method executes a Google Ads API query, processes the response through a
-        comprehensive data pipeline including type optimization, missing value handling,
-        and character encoding cleanup to produce a database-ready DataFrame.
-
-        Parameters:
-            customer_id (str): Google Ads customer ID
-            report_model (Dict[str, Any]): Report configuration with 'select', 'from',
-                optional 'where', 'order_by', and 'report_name' keys
-            start_date (date): Report start date (inclusive)
-            end_date (date): Report end date (inclusive)
-            filter_zero_impressions (bool): Remove rows with zero impressions.
-                Handles multiple zero formats: 0, "0", 0.0, "0.0", None, NaN
-            column_naming (str): Column naming convention. Options:
-                - "snake_case": campaign.name → campaign_name (default)
-                - "camelCase": campaign.name → campaignName
-
-        Returns:
-            pd.DataFrame: Optimized DataFrame with:
-                - Proper data types (datetime, int64/float64 for metrics)
-                - Database-compatible column names in chosen format
-                - Cleaned text encoding (ASCII-safe, max 255 chars)
-                - Preserved NaN/NaT for database NULL compatibility
-
-        Raises:
-            ValidationError: Invalid parameters or report model
-            AuthenticationError: API authentication failure
-            DataProcessingError: Response processing failure
-        """
-
-        response = self._get_google_ads_response(customer_id, report_model, start_date, end_date)
-
-        result_df = self._convert_response_to_df(response, report_model)
-
-        if not result_df.empty:
-
-            # Filter out rows with zero impressions (configurable behavior)
-            if filter_zero_impressions and "metrics.impressions" in result_df.columns:
-                # Handle multiple zero representations: 0, "0", 0.0, "0.0", None, NaN
-                mask = pd.to_numeric(result_df["metrics.impressions"], errors='coerce').fillna(0) != 0
-                result_df = result_df.loc[mask]
-
-            # 2. Essential data type fixes (dates and object metrics that should be numeric)
-            result_df = self._fix_data_types(result_df)
-
-            # 3. Handle missing values (after type conversion to preserve proper nulls for numerics)
-            result_df = self._handle_missing_values(result_df, fill_object_values="")
-
-            # 4. Clean text encoding for database compatibility
-            result_df = self._clean_text_encoding(result_df)
-
-            # 5. Transform column names according to specified convention
-            result_df = self._transform_column_names(result_df, naming_convention=column_naming)
-
-        return result_df
 
     # Alias to maintain compatibility with previous versions
     get_default_report = get_gads_report
