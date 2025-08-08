@@ -49,7 +49,7 @@ requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
-packages = [{ include = "google_ads_reports", from = "src" }]
+packages = [{ include = "google_ads_reports" }]
 
 [tool.mypy]
 python_version = "3.10"
