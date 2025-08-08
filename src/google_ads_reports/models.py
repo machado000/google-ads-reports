@@ -42,6 +42,7 @@ class GAdsReportModel:
             "metrics.engagement_rate",
             "metrics.interactions",
             "metrics.interaction_rate",
+            # "metrics.phone_calls",  # PROHIBITED_METRIC_IN_SELECT_OR_WHERE_CLAUSE
             "metrics.conversions",
             "metrics.conversions_from_interactions_rate",
             "metrics.conversions_value",
@@ -80,6 +81,7 @@ class GAdsReportModel:
             "metrics.cost_micros",
             "metrics.interactions",
             "metrics.interaction_rate",
+            # "metrics.phone_calls",  # PROHIBITED_METRIC_IN_SELECT_OR_WHERE_CLAUSE
             "metrics.conversions",
             "metrics.conversions_from_interactions_rate",
             "metrics.conversions_value",

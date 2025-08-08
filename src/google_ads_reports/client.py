@@ -71,7 +71,7 @@ class GAdsReport:
 
         try:
             # Initialize the Google Ads API client
-            self.client = GoogleAdsClient.load_from_dict(client_secret, version="v20")
+            self.client = GoogleAdsClient.load_from_dict(client_secret, version="v21")
 
             logging.info("Google YAML credentials are valid!")
             logging.info("Successful client authentication using Google Ads API (GAds)")
@@ -85,7 +85,7 @@ class GAdsReport:
 
         try:
             # Create a Google Ads API service client
-            self.service = self.client.get_service("GoogleAdsService", version="v20")
+            self.service = self.client.get_service("GoogleAdsService", version="v21")
         except Exception as e:
             logging.error(f"Failed to create Google Ads service: {e}", exc_info=True)
             raise AuthenticationError(
@@ -233,9 +233,9 @@ class GAdsReport:
         # logging.info(query_str:)  # DEBUG
 
         search_request = self.client.get_type("SearchGoogleAdsRequest")
-        search_request.customer_id = customer_id
-        search_request.query = query_str
-        search_request.search_settings.return_total_results_count = True
+        search_request.customer_id = customer_id  # type: ignore
+        search_request.query = query_str  # type: ignore
+        search_request.search_settings.return_total_results_count = True  # type: ignore
         # search_request.page_size = 100 # Deprecated in API v17, default as 10_000
         # logging.info(search_request:) # DEBUG only
 
@@ -270,7 +270,7 @@ class GAdsReport:
                         break
                     else:
                         logging.debug(f"Executing search request with next_page_token: '{response.next_page_token}'")
-                        search_request.page_token = response.next_page_token
+                        search_request.page_token = response.next_page_token  # type: ignore
                         response = self.service.search(search_request)
 
                 except Exception as e:
