@@ -5,7 +5,7 @@ A Python ETL driver for Google Ads API v20 data extraction and transformation. S
 [![PyPI version](https://img.shields.io/pypi/v/google-ads-reports)](https://pypi.org/project/google-ads-reports/)
 [![Issues](https://img.shields.io/github/issues/machado000/google-ads-reports)](https://github.com/machado000/google-ads-reports/issues)
 [![Last Commit](https://img.shields.io/github/last-commit/machado000/google-ads-reports)](https://github.com/machado000/google-ads-reports/commits/main)
-[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/machado000/google-ads-reports/blob/main/LICENSE)
+[![License](https://img.shields.io/badge/License-GPL-yellow.svg)](https://github.com/machado000/google-ads-reports/blob/main/LICENSE)
 
 ## Features
 
@@ -267,7 +267,7 @@ pip install -e ".[dev]"
 
 ## License
 
-MIT License. See [LICENSE](LICENSE) file for details.
+GPL License. See [LICENSE](LICENSE) file for details.
 
 ## Support
 
