@@ -138,6 +138,8 @@ class GAdsReport:
             if filter_zero_impressions and "metrics.impressions" in result_df.columns:
                 # Handle multiple zero representations: 0, "0", 0.0, "0.0", None, NaN
                 mask = pd.to_numeric(result_df["metrics.impressions"], errors='coerce').fillna(0) != 0
+                removed_rows = (~mask).sum()
+                logging.info(f"Filtered out {removed_rows} rows with zero impressions.")
                 result_df = result_df.loc[mask]
 
             # 2. Essential data type fixes (dates and object metrics that should be numeric)
