@@ -4,14 +4,13 @@ Google Ads API client module.
 This module contains the main GAdsReport class for interacting with the Google Ads API.
 """
 import logging
-import socket
-from datetime import date, datetime
-from typing import Any, Dict, Optional
-
 import pandas as pd
+import socket
+
+from datetime import date, datetime
 from google.ads.googleads.client import GoogleAdsClient
 from google.protobuf.json_format import MessageToDict
-
+from typing import Any, Dict, Optional
 from .exceptions import AuthenticationError, DataProcessingError, ValidationError
 from .retry import retry_on_api_error
 
@@ -41,7 +40,7 @@ class GAdsReport:
         _get_google_ads_response: Executes API requests with retry logic and pagination
         _convert_response_to_df: Converts protobuf responses to Pandas DataFrames
         _fix_data_types: Optimizes column data types (dates, dynamic metrics conversion)
-        _should_be_integer: Determines optimal numeric data type (int64 vs float64)
+        _should_be_integer: Determines optimal numeric data type (Int64 vs float64)
         _handle_missing_values: Configurable NaN/NaT handling by column type
         _clean_text_encoding: Cleans text columns for database compatibility
         _transform_column_names: Configurable column naming (snake_case or camelCase)
@@ -118,7 +117,7 @@ class GAdsReport:
 
         Returns:
             pd.DataFrame: Optimized DataFrame with:
-                - Proper data types (datetime, int64/float64 for metrics)
+                - Proper data types (datetime, Int64/float64 for metrics)
                 - Database-compatible column names in chosen format
                 - Cleaned text encoding (ASCII-safe, max 255 chars)
                 - Preserved NaN/NaT for database NULL compatibility
@@ -359,8 +358,8 @@ class GAdsReport:
 
                     # Determine if it should be int or float based on the data
                     if self._should_be_integer(numeric_series):
-                        df[col] = numeric_series.astype('int64')
-                        logging.debug(f"Converted {col} from object to int64")
+                        df[col] = numeric_series.astype('Int64')
+                        logging.debug(f"Converted {col} from object to Int64")
                     else:
                         df[col] = numeric_series.astype('float64')
                         logging.debug(f"Converted {col} from object to float64")
