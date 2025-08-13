@@ -6,7 +6,7 @@ This directory contains example scripts demonstrating how to use the `google-ads
 
 Before running any examples, ensure you have:
 
-1. **Google Ads API credentials** configured in `secrets/google-ads.yaml`
+1. **Google Ads API credentials** configured in `secrets/google-ads.yaml` or via environment variables in `.env` (see main README)
 2. **Valid customer ID** for your Google Ads account
 3. **Required dependencies** installed (see `requirements.txt` or `pyproject.toml`)
 
@@ -101,8 +101,9 @@ Replace the placeholder customer ID (`"1234567890"`) in each example with your a
 ### Date Ranges
 Examples use relative date ranges (last 7 days, last 30 days, etc.). Modify the `start_date` and `end_date` variables to suit your needs.
 
+
 ### Credentials Location
-By default, examples look for credentials in `secrets/google-ads.yaml`. To use a different location:
+By default, examples look for credentials in `secrets/google-ads.yaml` or from environment variables in `.env` (see main README). To use a different YAML file location:
 
 ```python
 # Specify custom path

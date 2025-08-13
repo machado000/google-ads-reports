@@ -1,3 +1,18 @@
+## [1.3.0] - 2025-08-13
+
+### Added
+- Support for authentication using environment variables in `.env` (service account JSON via `GOOGLE_ADS_JSON_KEY`)
+- Automatic creation of temporary file for service account authentication when only JSON string is available
+- Documentation updates for environment variable authentication option
+
+### Enhanced
+- Improved error handling for missing or invalid environment variables
+- README and examples updated to reflect new authentication method
+
+### Technical
+- Uses `python-dotenv` to load `.env` variables
+- Automatically sets `GOOGLE_ADS_JSON_KEY_FILE_PATH` if only `GOOGLE_ADS_JSON_KEY` is present
+
 # Changelog
 
 All notable changes to this project will be documented in this file.
