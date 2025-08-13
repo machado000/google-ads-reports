@@ -27,7 +27,7 @@ def main():
         return
 
     # Initialize the Google Ads client
-    gads_client = GAdsReport(credentials)
+    gads_client = GAdsReport(client_secret=credentials)
 
     # Configuration
     load_dotenv()

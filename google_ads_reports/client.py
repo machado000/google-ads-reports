@@ -6,11 +6,14 @@ This module contains the main GAdsReport class for interacting with the Google A
 import logging
 import pandas as pd
 import socket
+import tempfile
+import os
 
 from datetime import date, datetime
+from dotenv import load_dotenv
 from google.ads.googleads.client import GoogleAdsClient
 from google.protobuf.json_format import MessageToDict
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 from .exceptions import AuthenticationError, DataProcessingError, ValidationError
 from .retry import retry_on_api_error
 
@@ -29,7 +32,7 @@ class GAdsReport:
     and flexible column naming conventions (snake_case or camelCase).
 
     Parameters:
-        client_secret (Dict[str, Any]): Google Ads API authentication configuration
+        client_secret (Optional[dict[str, Any]]): Google Ads API authentication configuration
 
     Methods:
         get_gads_report: Main method to retrieve and process Google Ads report data
@@ -51,7 +54,7 @@ class GAdsReport:
         DataProcessingError: API response processing failures
     """
 
-    def __init__(self, client_secret: Dict[str, Any]):
+    def __init__(self, client_secret: Optional[dict[str, Any]] = None):
         """
         Initializes the GAdsReport instance.
 
@@ -62,25 +65,47 @@ class GAdsReport:
         - AuthenticationError: If credentials are invalid or authentication fails
         - ValidationError: If client_secret format is invalid
         """
-        if not isinstance(client_secret, dict):
-            raise ValidationError("client_secret must be a dictionary")
 
-        if not client_secret:
-            raise ValidationError("client_secret cannot be empty")
+        if client_secret is not None:
+            if not isinstance(client_secret, dict):
+                raise ValidationError("client_secret must be a dictionary if provided")
 
-        try:
-            # Initialize the Google Ads API client
-            self.client = GoogleAdsClient.load_from_dict(client_secret, version="v21")
+            if not client_secret:
+                raise ValidationError("client_secret cannot be empty if provided")
 
-            logging.info("Google YAML credentials are valid!")
-            logging.info("Successful client authentication using Google Ads API (GAds)")
+            try:
+                # Initialize the Google Ads API client from dict
+                self.client = GoogleAdsClient.load_from_dict(client_secret, version="v21")
+                logging.info("Google YAML credentials are valid!")
+                logging.info("Successful client authentication using Google Ads API (GAds)")
 
-        except Exception as e:
-            logging.error(f"Authentication failed: {e}", exc_info=True)
-            raise AuthenticationError(
-                "Failed to authenticate with Google Ads API",
-                original_error=e
-            ) from e
+            except Exception as e:
+                logging.error(f"Authentication failed: {e}", exc_info=True)
+                raise AuthenticationError(
+                    "Failed to authenticate with Google Ads API using client_secret",
+                    original_error=e
+                ) from e
+        else:
+            try:
+                # Initialize the Google Ads API client from environment
+                load_dotenv()
+
+                json_key = os.getenv("GOOGLE_ADS_JSON_KEY")
+                if json_key:
+                    with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json") as tmp:
+                        tmp.write(json_key)
+                        tmp_path = tmp.name
+                    os.environ["GOOGLE_ADS_JSON_KEY_FILE_PATH"] = tmp_path
+
+                self.client = GoogleAdsClient.load_from_env(version="v21")
+                logging.info("Google Ads client loaded from environment variables.")
+
+            except Exception as e:
+                logging.error(f"Authentication failed (env): {e}", exc_info=True)
+                raise AuthenticationError(
+                    "Failed to authenticate with Google Ads API from environment",
+                    original_error=e
+                ) from e
 
         try:
             # Create a Google Ads API service client
@@ -92,7 +117,7 @@ class GAdsReport:
                 original_error=e
             ) from e
 
-    def get_gads_report(self, customer_id: str, report_model: Dict[str, Any],
+    def get_gads_report(self, customer_id: str, report_model: dict[str, Any],
                         start_date: date, end_date: date,
                         filter_zero_impressions: bool = True,
                         column_naming: str = "snake_case") -> pd.DataFrame:
@@ -105,7 +130,7 @@ class GAdsReport:
 
         Parameters:
             customer_id (str): Google Ads customer ID
-            report_model (Dict[str, Any]): Report configuration with 'select', 'from',
+            report_model (dict[str, Any]): Report configuration with 'select', 'from',
                 optional 'where', 'order_by', and 'report_name' keys
             start_date (date): Report start date (inclusive)
             end_date (date): Report end date (inclusive)
@@ -156,7 +181,7 @@ class GAdsReport:
 
         return result_df
 
-    def _build_gads_query(self, report_model: Dict[str, Any], start_date: date, end_date: date) -> str:
+    def _build_gads_query(self, report_model: dict[str, Any], start_date: date, end_date: date) -> str:
         """
         Creates a query string for the Google Ads API.
 
@@ -189,8 +214,8 @@ class GAdsReport:
         return query_str
 
     @retry_on_api_error(max_attempts=3, base_delay=1.0)
-    def _get_google_ads_response(self, customer_id: str, report_model: Dict[str, Any],
-                                 start_date: date, end_date: date) -> Dict[str, Any]:
+    def _get_google_ads_response(self, customer_id: str, report_model: dict[str, Any],
+                                 start_date: date, end_date: date) -> dict[str, Any]:
         """
         Retrieves GAds report data using GoogleAdsClient().get_service().search() .
 
@@ -240,7 +265,7 @@ class GAdsReport:
         # search_request.page_size = 100 # Deprecated in API v17, default as 10_000
         # logging.info(search_request:) # DEBUG only
 
-        full_response_dict: Dict[str, Any] = {
+        full_response_dict: dict[str, Any] = {
             "results": [],
             "totalResultsCount": 0,
             "fieldMask": "",
@@ -291,7 +316,7 @@ class GAdsReport:
 
         return full_response_dict
 
-    def _convert_response_to_df(self, response: Dict[str, Any], report_model: Dict[str, Any]) -> pd.DataFrame:
+    def _convert_response_to_df(self, response: dict[str, Any], report_model: dict[str, Any]) -> pd.DataFrame:
         """
         Converts the Google Ads API protobuf response 'MessageToDict(response._pb)' to dataFrame.
 
