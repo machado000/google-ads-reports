@@ -10,7 +10,7 @@ from datetime import date, timedelta
 from dotenv import load_dotenv
 
 from google_ads_reports import GAdsReport, GAdsReportModel
-from google_ads_reports import create_output_directory, format_report_filename, load_credentials, setup_logging
+from google_ads_reports import load_credentials, create_output_directory, format_report_filename, setup_logging
 
 
 def main():
