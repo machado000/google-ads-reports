@@ -70,6 +70,7 @@ class GAdsReportModel:
         "report_name": "assetgroup_report",
         "select": [
             "segments.date",
+            "campaign.advertising_channel_type",
             "campaign.id",
             "asset_group.id",
             "campaign.name",
