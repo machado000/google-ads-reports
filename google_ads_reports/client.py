@@ -256,14 +256,13 @@ class GAdsReport:
                 original_error=e,
                 report_model=report_model.get('report_name', 'unknown')
             ) from e
-        # logging.info(query_str:)  # DEBUG
 
         search_request = self.client.get_type("SearchGoogleAdsRequest")
         search_request.customer_id = customer_id  # type: ignore
         search_request.query = query_str  # type: ignore
         search_request.search_settings.return_total_results_count = True  # type: ignore
         # search_request.page_size = 100 # Deprecated in API v17, default as 10_000
-        # logging.info(search_request:) # DEBUG only
+        logging.debug(search_request)  # DEBUG only
 
         full_response_dict: dict[str, Any] = {
             "results": [],

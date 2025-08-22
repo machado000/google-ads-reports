@@ -70,8 +70,9 @@ class GAdsReportModel:
         "report_name": "assetgroup_report",
         "select": [
             "segments.date",
-            "asset_group.campaign",
+            "campaign.id",
             "asset_group.id",
+            "campaign.name",
             "asset_group.name",
             "asset_group.final_urls",
             "metrics.impressions",
