@@ -5,9 +5,10 @@ import logging
 import random
 import time
 
-from google.ads.googleads.errors import GoogleAdsException
 from functools import wraps
+from google.ads.googleads.errors import GoogleAdsException
 from typing import Any, Callable
+
 from .exceptions import APIError
 
 

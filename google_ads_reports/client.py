@@ -4,7 +4,6 @@ Google Ads API client module.
 This module contains the main GAdsReport class for interacting with the Google Ads API.
 """
 import logging
-import pandas as pd
 import socket
 import tempfile
 import os
@@ -13,9 +12,15 @@ from datetime import date, datetime
 from dotenv import load_dotenv
 from google.ads.googleads.client import GoogleAdsClient
 from google.protobuf.json_format import MessageToDict
-from typing import Any, Optional
+from typing import Any
 from .exceptions import AuthenticationError, DataProcessingError, ValidationError
 from .retry import retry_on_api_error
+
+# Python 3.12+ type aliases for better readability
+type Record = dict[str, Any]
+type RecordList = list[Record]
+type ReportModel = dict[str, Any]
+type APIResponse = dict[str, Any]
 
 # Set timeout for all http connections
 TIMEOUT_IN_SEC = 60 * 3  # seconds timeout limit
@@ -24,15 +29,18 @@ socket.setdefaulttimeout(TIMEOUT_IN_SEC)
 
 class GAdsReport:
     """
-    GAdsReport class for interacting with the Google Ads API v20.
+    GAdsReport class for interacting with the Google Ads API v21.
 
     This class enables extraction of Google Ads data and transformation into optimized
-    Pandas DataFrames ready for database storage. It provides comprehensive data type
-    optimization, configurable missing value handling, character encoding cleanup,
+    list of dictionaries ready for database storage. It provides comprehensive data
+    processing, configurable missing value handling, character encoding cleanup,
     and flexible column naming conventions (snake_case or camelCase).
 
+    Optimized for serverless environments by removing heavy dependencies like pandas
+    and using pure Python data structures for better cold start performance.
+
     Parameters:
-        client_secret (Optional[dict[str, Any]]): Google Ads API authentication configuration
+        client_secret (dict[str, Any] | None): Google Ads API authentication configuration
 
     Methods:
         get_gads_report: Main method to retrieve and process Google Ads report data
@@ -41,11 +49,9 @@ class GAdsReport:
     Private Methods:
         _build_gads_query: Constructs GAQL queries for the Google Ads API
         _get_google_ads_response: Executes API requests with retry logic and pagination
-        _convert_response_to_df: Converts protobuf responses to Pandas DataFrames
-        _fix_data_types: Optimizes column data types (dates, dynamic metrics conversion)
-        _should_be_integer: Determines optimal numeric data type (Int64 vs float64)
-        _handle_missing_values: Configurable NaN/NaT handling by column type
-        _clean_text_encoding: Cleans text columns for database compatibility
+        _convert_response_to_records: Converts protobuf responses to list of dictionaries
+        _handle_missing_values: Configurable None handling for different value types
+        _clean_text_encoding: Cleans text values for database compatibility
         _transform_column_names: Configurable column naming (snake_case or camelCase)
 
     Raises:
@@ -54,7 +60,7 @@ class GAdsReport:
         DataProcessingError: API response processing failures
     """
 
-    def __init__(self, client_secret: Optional[dict[str, Any]] = None):
+    def __init__(self, client_secret: ReportModel | None = None):
         """
         Initializes the GAdsReport instance.
 
@@ -76,8 +82,7 @@ class GAdsReport:
             try:
                 # Initialize the Google Ads API client from dict
                 self.client = GoogleAdsClient.load_from_dict(client_secret, version="v21")
-                logging.info("Google YAML credentials are valid!")
-                logging.info("Successful client authentication using Google Ads API (GAds)")
+                logging.info("Google Ads client authenticated from provided credentials")
 
             except Exception as e:
                 logging.error(f"Authentication failed: {e}", exc_info=True)
@@ -98,7 +103,7 @@ class GAdsReport:
                     os.environ["GOOGLE_ADS_JSON_KEY_FILE_PATH"] = tmp_path
 
                 self.client = GoogleAdsClient.load_from_env(version="v21")
-                logging.info("Google Ads client loaded from environment variables.")
+                logging.info("Google Ads client loaded from environment variables")
 
             except Exception as e:
                 logging.error(f"Authentication failed (env): {e}", exc_info=True)
@@ -107,45 +112,51 @@ class GAdsReport:
                     original_error=e
                 ) from e
 
-        try:
-            # Create a Google Ads API service client
-            self.service = self.client.get_service("GoogleAdsService", version="v21")
-        except Exception as e:
-            logging.error(f"Failed to create Google Ads service: {e}", exc_info=True)
-            raise AuthenticationError(
-                "Failed to create Google Ads API service",
-                original_error=e
-            ) from e
+        # Lazy initialization of service - only create when needed
+        self._service = None
 
-    def get_gads_report(self, customer_id: str, report_model: dict[str, Any],
+    @property
+    def service(self) -> Any:
+        """Lazy initialization of Google Ads service for better serverless performance."""
+        if self._service is None:
+            try:
+                self._service = self.client.get_service("GoogleAdsService", version="v21")
+            except Exception as e:
+                logging.error(f"Failed to create Google Ads service: {e}", exc_info=True)
+                raise AuthenticationError(
+                    "Failed to create Google Ads API service",
+                    original_error=e
+                ) from e
+        return self._service
+
+    def get_gads_report(self, customer_id: str, report_model: ReportModel,
                         start_date: date, end_date: date,
                         filter_zero_impressions: bool = True,
-                        column_naming: str = "snake_case") -> pd.DataFrame:
+                        column_naming: str = "snake_case") -> RecordList:
         """
-        Retrieves and processes Google Ads report data with database optimization.
+        Retrieves and processes Google Ads report data for database insertion.
 
         This method executes a Google Ads API query, processes the response through a
-        comprehensive data pipeline including type optimization, missing value handling,
-        and character encoding cleanup to produce a database-ready DataFrame.
+        comprehensive data pipeline including missing value handling and character
+        encoding cleanup to produce database-ready records.
 
         Parameters:
             customer_id (str): Google Ads customer ID
-            report_model (dict[str, Any]): Report configuration with 'select', 'from',
+            report_model (ReportModel): Report configuration with 'select', 'from',
                 optional 'where', 'order_by', and 'report_name' keys
             start_date (date): Report start date (inclusive)
             end_date (date): Report end date (inclusive)
             filter_zero_impressions (bool): Remove rows with zero impressions.
-                Handles multiple zero formats: 0, "0", 0.0, "0.0", None, NaN
+                Handles multiple zero formats: 0, "0", 0.0, "0.0", None
             column_naming (str): Column naming convention. Options:
                 - "snake_case": campaign.name → campaign_name (default)
                 - "camelCase": campaign.name → campaignName
 
         Returns:
-            pd.DataFrame: Optimized DataFrame with:
-                - Proper data types (datetime, Int64/float64 for metrics)
+            RecordList: List of records with:
                 - Database-compatible column names in chosen format
                 - Cleaned text encoding (ASCII-safe, max 255 chars)
-                - Preserved NaN/NaT for database NULL compatibility
+                - Preserved None values for database NULL compatibility
 
         Raises:
             ValidationError: Invalid parameters or report model
@@ -155,38 +166,38 @@ class GAdsReport:
 
         response = self._get_google_ads_response(customer_id, report_model, start_date, end_date)
 
-        result_df = self._convert_response_to_df(response, report_model)
+        result_records = self._convert_response_to_records(response, report_model)
 
-        if not result_df.empty:
+        if result_records:
 
             # Filter out rows with zero impressions (configurable behavior)
-            if filter_zero_impressions and "metrics.impressions" in result_df.columns:
-                # Handle multiple zero representations: 0, "0", 0.0, "0.0", None, NaN
-                mask = pd.to_numeric(result_df["metrics.impressions"], errors='coerce').fillna(0) != 0
-                removed_rows = (~mask).sum()
-                logging.info(f"Filtered out {removed_rows} rows with zero impressions.")
-                result_df = result_df.loc[mask]
+            if filter_zero_impressions:
+                original_count = len(result_records)
+                result_records = [
+                    record for record in result_records
+                    if not self._is_zero_impression_record(record)
+                ]
+                removed_rows = original_count - len(result_records)
+                if removed_rows > 0:
+                    logging.info(f"Filtered out {removed_rows} rows with zero impressions.")
 
-            # 2. Essential data type fixes (dates and object metrics that should be numeric)
-            result_df = self._fix_data_types(result_df)
+            # Handle missing values for database compatibility
+            # result_records = self._handle_missing_values(result_records, fill_object_values="")
 
-            # 3. Handle missing values (after type conversion to preserve proper nulls for numerics)
-            result_df = self._handle_missing_values(result_df, fill_object_values="")
+            # Clean text encoding for database compatibility
+            result_records = self._clean_text_encoding(result_records)
 
-            # 4. Clean text encoding for database compatibility
-            result_df = self._clean_text_encoding(result_df)
+            # Transform column names according to specified convention
+            result_records = self._transform_column_names(result_records, naming_convention=column_naming)
 
-            # 5. Transform column names according to specified convention
-            result_df = self._transform_column_names(result_df, naming_convention=column_naming)
+        return result_records
 
-        return result_df
-
-    def _build_gads_query(self, report_model: dict[str, Any], start_date: date, end_date: date) -> str:
+    def _build_gads_query(self, report_model: ReportModel, start_date: date, end_date: date) -> str:
         """
         Creates a query string for the Google Ads API.
 
         Parameters:
-        - report_model (dict): The report model specifying dimensions, metrics, etc.
+        - report_model (ReportModel): The report model specifying dimensions, metrics, etc.
         - start_date (date): Start date for the report.
         - end_date (date): End date for the report.
 
@@ -214,19 +225,19 @@ class GAdsReport:
         return query_str
 
     @retry_on_api_error(max_attempts=3, base_delay=1.0)
-    def _get_google_ads_response(self, customer_id: str, report_model: dict[str, Any],
-                                 start_date: date, end_date: date) -> dict[str, Any]:
+    def _get_google_ads_response(self, customer_id: str, report_model: ReportModel,
+                                 start_date: date, end_date: date) -> APIResponse:
         """
         Retrieves GAds report data using GoogleAdsClient().get_service().search() .
 
         Parameters:
         - customer_id (str): The customer ID for Google Ads.
-        - report_model (dict): The report model specifying dimensions, metrics, etc.
+        - report_model (ReportModel): The report model specifying dimensions, metrics, etc.
         - start_date (date): Start date for the report.
         - end_date (date): End date for the report.
 
         Returns:
-        - dict: GAds report data dict containing keys `results`, `totalResultsCount`, and `fieldMask`.
+        - APIResponse: GAds report data dict containing keys `results`, `totalResultsCount`, and `fieldMask`.
 
         Raises:
         - ValidationError: If input parameters are invalid
@@ -240,13 +251,12 @@ class GAdsReport:
             raise ValidationError("report_model must be a dict with 'report_name' key")
 
         # Display request parameters
-        print("\n[ Request parameters ]",
-              f"Resource: {format(type(self.service).__name__)}",
-              f"Customer_id: {customer_id}",
-              f"Report_model: {report_model['report_name']}",
-              f"Date range: from {start_date.isoformat()} to {end_date.isoformat()}",
-              "",
-              sep="\n")
+        print("[ Request parameters ]\n"
+              f"Resource: {type(self.service).__name__}\n"
+              f"Customer_id: {customer_id}\n"
+              f"Report_model: {report_model['report_name']}\n"
+              f"Date range: from {start_date.isoformat()} to {end_date.isoformat()}\n"
+              )
 
         try:
             query_str = self._build_gads_query(report_model, start_date, end_date)
@@ -264,7 +274,7 @@ class GAdsReport:
         # search_request.page_size = 100 # Deprecated in API v17, default as 10_000
         logging.debug(search_request)  # DEBUG only
 
-        full_response_dict: dict[str, Any] = {
+        full_response_dict: APIResponse = {
             "results": [],
             "totalResultsCount": 0,
             "fieldMask": "",
@@ -315,235 +325,213 @@ class GAdsReport:
 
         return full_response_dict
 
-    def _convert_response_to_df(self, response: dict[str, Any], report_model: dict[str, Any]) -> pd.DataFrame:
+    def _convert_response_to_records(self, response: APIResponse,
+                                     report_model: ReportModel) -> RecordList:
         """
-        Converts the Google Ads API protobuf response 'MessageToDict(response._pb)' to dataFrame.
+        Converts the Google Ads API protobuf response to list of dictionaries.
 
         Parameters:
         - response: The Google Ads API response in protobuf dict format.
-        - report_model (dict): The custom report model specifying dimensions to guide dataframe schema.
+        - report_model (ReportModel): The custom report model specifying dimensions.
 
         Returns:
-        - DataFrame: Pandas DataFrame containing GAds report data.
+        - RecordList: List of records containing GAds report data.
 
         Raises:
-        - DataProcessingError: If DataFrame conversion fails
+        - DataProcessingError: If conversion fails
         """
         try:
             if not response or "results" not in response:
                 raise DataProcessingError("Response is empty or missing 'results' key")
 
             if not response["results"]:
-                logging.info("No results returned, creating empty DataFrame")
-                return pd.DataFrame()
+                logging.info("No results returned, creating empty list")
+                return []
 
-            # Create a DataFrame from the response data
-            result_df = pd.json_normalize(response["results"])
+            # Flatten nested dictionaries from the response
+            records = []
+            for result in response["results"]:
+                flattened_record = self._flatten_dict(result)
+                # Remove resource name fields
+                cleaned_record = {
+                    k: v for k, v in flattened_record.items()
+                    if not k.endswith(".resourceName")
+                }
+                records.append(cleaned_record)
 
-            # Drop resource name columns
-            columns_to_drop = [col for col in result_df.columns if ".resourceName" in col]
-            if columns_to_drop:
-                result_df = result_df.drop(columns=columns_to_drop)
-
-            return result_df
+            return records
 
         except Exception as e:
             raise DataProcessingError(
-                "Failed to convert API response to DataFrame",
+                "Failed to convert API response to records",
                 original_error=e,
                 report_name=report_model.get('report_name', 'unknown')
             ) from e
 
-    def _fix_data_types(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _flatten_dict(self, nested_dict: Record, parent_key: str = "", sep: str = ".") -> Record:
         """
-        Optimizes data types for database storage.
-        """
-
-        df = df.copy()
-
-        try:
-            # 1. Fix date columns (these come as strings from API)
-            date_columns = [col for col in df.columns if 'date' in col]
-            for col in date_columns:
-                if col in df.columns and df[col].dtype == 'object':
-                    df[col] = pd.to_datetime(df[col], errors='raise')  # Fail fast if dates are invalid
-                    logging.debug(f"Converted {col} to datetime")
-
-            # 2. Dynamically find and convert metric columns that come as 'object' but should be numeric
-            metrics_to_convert = []
-
-            # Find all columns that contain 'metrics' and are currently 'object' type
-            for col in df.columns:
-                if 'metrics' in col and df[col].dtype == 'object':
-                    metrics_to_convert.append(col)
-
-            for col in metrics_to_convert:
-                try:
-                    # First convert to numeric to see what we get
-                    numeric_series = pd.to_numeric(df[col], errors='raise')
-
-                    # Determine if it should be int or float based on the data
-                    if self._should_be_integer(numeric_series):
-                        df[col] = numeric_series.astype('Int64')
-                        logging.debug(f"Converted {col} from object to Int64")
-                    else:
-                        df[col] = numeric_series.astype('float64')
-                        logging.debug(f"Converted {col} from object to float64")
-
-                except ValueError as e:
-                    logging.warning(f"Could not convert {col} to numeric: {e}")
-                    # Keep as object type if conversion fails
-
-            return df
-
-        except Exception as e:
-            logging.error(f"Data type optimization failed: {e}")
-            return df
-
-    def _should_be_integer(self, numeric_series: pd.Series) -> bool:
-        """
-        Determines if a numeric series should be stored as integer or float.
+        Flattens nested dictionary structure.
 
         Parameters:
-        - numeric_series: The pandas Series with numeric data
+        - nested_dict: The nested dictionary to flatten
+        - parent_key: The parent key for recursion
+        - sep: Separator for nested keys
 
         Returns:
-        - bool: True if should be integer, False if should be float
+        - Record: Flattened dictionary
         """
-        # Remove NaN values for analysis
-        clean_series = numeric_series.dropna()
+        items: list[tuple[str, Any]] = []
+        for k, v in nested_dict.items():
+            new_key = f"{parent_key}{sep}{k}" if parent_key else k
+            if isinstance(v, dict):
+                items.extend(self._flatten_dict(v, new_key, sep=sep).items())
+            else:
+                items.append((new_key, v))
+        return dict(items)
 
-        if len(clean_series) == 0:
-            return False  # Default to float if no data
-
-        # If all values are whole numbers, use integer
-        if (clean_series % 1 == 0).all():
-            return True
-
-        return False  # Has decimals, should be float
-
-    def _handle_missing_values(self, df: pd.DataFrame,
-                               fill_numeric_values: Optional[str] = None,
-                               fill_datetime_values: Optional[str] = None,
-                               fill_object_values: str = "") -> pd.DataFrame:
+    def _is_zero_impression_record(self, record: Record) -> bool:
         """
-        Handles missing values appropriately based on column types.
+        Checks if a record has zero impressions.
 
         Parameters:
-        - fill_numeric_values: Value to fill NaN in numeric columns (empty = preserve NaN)
-        - fill_datetime_values: Value to fill NaT in datetime columns (empty = preserve NaT)
-        - fill_object_values: Value to fill NaN in object/text columns (empty string by default)
-        """
+        - record: The record to check
 
-        if not fill_datetime_values and not fill_numeric_values and not fill_object_values:
-            logging.debug("No fill values provided, preserving NaN/NaT for numeric and datetime columns")
-            return df
+        Returns:
+        - bool: True if record has zero impressions
+        """
+        impression_value = record.get("metrics.impressions")
+
+        if impression_value is None:
+            return True
+
+        # Fast path for common cases
+        if impression_value == 0 or impression_value == "0":
+            return True
+
+        # Handle various zero representations
+        try:
+            return float(impression_value) == 0.0
+        except (ValueError, TypeError):
+            # If can't convert to float, check string representations
+            str_value = str(impression_value).strip().lower()
+            return str_value in {"0.0", "", "none", "null"}
+
+    def _handle_missing_values(self, records: RecordList,
+                               fill_object_values: str = "") -> RecordList:
+        """
+        Handles missing values appropriately for database compatibility.
+
+        Parameters:
+        - records: List of records to process
+        - fill_object_values: Value to fill None in text fields (empty string by default)
+
+        Returns:
+        - RecordList: Processed records
+        """
+        if not records:
+            return records
+
+        processed_records = []
+        for record in records:
+            processed_record = {}
+            for key, value in record.items():
+                # Handle None values for text fields
+                if value is None and fill_object_values != "":
+                    processed_record[key] = fill_object_values
+                else:
+                    processed_record[key] = value
+            processed_records.append(processed_record)
+
+        return processed_records
+
+    def _clean_text_encoding(self, records: RecordList) -> RecordList:
+        """
+        Cleans text values for character encoding issues.
+
+        Parameters:
+        - records: List of records to process
+
+        Returns:
+        - RecordList: Records with cleaned text values
+        """
+        if not records:
+            return records
 
         try:
-            for col in df.columns:
-                # Case 1: Numeric columns (int, float)
-                if pd.api.types.is_numeric_dtype(df[col]) and fill_numeric_values not in (None, ""):
-                    try:
-                        # Attempt to convert to numeric value
-                        if fill_numeric_values is not None:
-                            fill_val = float(fill_numeric_values)
-                            df[col] = df[col].fillna(fill_val)
-                    except (ValueError, TypeError):
-                        pass  # Keep NaN if conversion fails
-
-                # Case 2: Datetime columns
-                elif pd.api.types.is_datetime64_any_dtype(df[col]) and fill_datetime_values not in (None, ""):
-                    try:
-                        # Attempt to convert to datetime
-                        if fill_datetime_values is not None:
-                            fill_datetime = pd.to_datetime(fill_datetime_values, errors='raise')
-                            df[col] = df[col].fillna(fill_datetime)
-                    except (ValueError, TypeError, pd.errors.ParserError):
-                        pass  # Keep NaT if conversion fails
-
-                # Case 3: Object columns (text, categorical)
-                elif pd.api.types.is_object_dtype(df[col]) and fill_object_values != "":
-                    # Always fill object columns with the specified value
-                    df[col] = df[col].fillna(fill_object_values)
-
-            return df
-
-        except Exception as e:
-            logging.warning(f"Missing value handling failed: {e}")
-            return df
-
-    def _clean_text_encoding(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Cleans text columns for character encoding issues.
-        """
-        try:
-            for col in df.select_dtypes(include=['object']).columns:
-                if df[col].dtype == 'object':
-                    # Handle common encoding issues
-                    df[col] = df[col].astype(str)
-                    # Remove or replace problematic characters
-                    df[col] = df[col].str.replace(r'[^\x00-\x7F]+', '', regex=True)  # Remove non-ASCII
-                    df[col] = df[col].str.replace('\x00', '', regex=False)  # Remove null bytes
-                    df[col] = df[col].str.replace(r'[\r\n]+', ' ', regex=True)  # Remove line breaks
-                    df[col] = df[col].str.strip()  # Remove leading/trailing whitespace
-                    # Limit string length for database compatibility (adjust as needed)
-                    df[col] = df[col].str[:255]
-            return df
+            cleaned_records = []
+            for record in records:
+                cleaned_record = {}
+                for key, value in record.items():
+                    if isinstance(value, str):
+                        # Optimized text cleaning for serverless environments
+                        # Remove non-ASCII characters, null bytes, and normalize whitespace
+                        cleaned_value = (
+                            value.encode('ascii', 'ignore')
+                            .decode('ascii')
+                            .replace('\x00', '')
+                            .replace('\r', ' ')
+                            .replace('\n', ' ')
+                            .strip()[:255]  # Truncate to DB field limit
+                        )
+                        cleaned_record[key] = cleaned_value
+                    else:
+                        cleaned_record[key] = value
+                cleaned_records.append(cleaned_record)
+            return cleaned_records
 
         except Exception as e:
             logging.warning(f"Character encoding cleanup failed: {e}")
-            return df
+            return records
 
-    def _transform_column_names(self, df: pd.DataFrame, naming_convention: str = "snake_case") -> pd.DataFrame:
+    def _transform_column_names(self, records: RecordList,
+                                naming_convention: str = "snake_case") -> RecordList:
         """
         Transforms column names according to the specified naming convention.
 
         Parameters:
-            df (pd.DataFrame): DataFrame with original column names
+            records: List of records with original column names
             naming_convention (str):
                 - "snake_case": campaign.name → campaign_name (default)
                 - "camelCase": campaign.name → campaignName
         Returns:
-            pd.DataFrame: DataFrame with transformed column names
+            RecordList: Records with transformed column names
         """
         # Validate column naming parameter
         if naming_convention.lower() not in ["snake_case", "camelcase"]:
             naming_convention = "snake_case"
             logging.warning(f"Invalid column_naming '{naming_convention}'. Using 'snake_case' as default")
 
+        if not records:
+            return records
+
         try:
-            if naming_convention.lower() == "snake_case":
-                # Remove prefixes and convert to snake_case
-                df.columns = [
-                    col.replace("segments.", "")
-                       .replace("adGroupCriterion.", "")
-                       .replace("metrics.", "")
-                       .replace(".", "_")
-                       .lower()
-                    for col in df.columns
-                ]
+            transformed_records = []
+            for record in records:
+                transformed_record = {}
+                for col, value in record.items():
+                    if naming_convention.lower() == "snake_case":
+                        # Remove prefixes and convert to snake_case
+                        new_col = (col.replace("segments.", "")
+                                   .replace("adGroupCriterion.", "")
+                                   .replace("metrics.", "")
+                                   .replace(".", "_")
+                                   .lower())
 
-            elif naming_convention.lower() == "camelcase":
-                # Remove prefixes and convert to camelCase
-                renamed_columns = []
-                for col in df.columns:
-                    # First remove the prefixes
-                    clean_col = (col.replace("segments.", "")
-                                 .replace("adGroupCriterion.", "")
-                                 .replace("metrics.", ""))
+                    elif naming_convention.lower() == "camelcase":
+                        # Remove prefixes and convert to camelCase
+                        clean_col = (col.replace("segments.", "")
+                                     .replace("adGroupCriterion.", "")
+                                     .replace("metrics.", ""))
 
-                    # Then convert to camelCase by capitalizing first letter after each dot, then removing dots
-                    parts = clean_col.split(".")
-                    # Keep first part as is, capitalize first letter of subsequent parts
-                    camel_case_col = parts[0] + "".join(part.capitalize() for part in parts[1:])
-                    renamed_columns.append(camel_case_col)
-                df.columns = renamed_columns
+                        # Convert to camelCase
+                        parts = clean_col.split(".")
+                        new_col = parts[0] + "".join(part.capitalize() for part in parts[1:])
 
-            return df
+                    transformed_record[new_col] = value
+                transformed_records.append(transformed_record)
+
+            return transformed_records
 
         except Exception as e:
             logging.warning(f"Column naming transformation failed: {e}")
-            return df
-
-    # Alias to maintain compatibility with previous versions
-    get_default_report = get_gads_report
+            return records

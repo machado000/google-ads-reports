@@ -1,12 +1,13 @@
 """
 Custom exceptions for the Google Ads driver module.
 """
+from typing import Any
 
 
 class GAdsReportError(Exception):
     """Base exception for all Google Ads report errors."""
 
-    def __init__(self, message: str, original_error=None, **context):
+    def __init__(self, message: str, original_error: Exception | None = None, **context: Any) -> None:
         self.message = message
         self.original_error = original_error
         self.context = context

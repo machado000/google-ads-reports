@@ -162,7 +162,7 @@ The package provides specific exception types for different error scenarios:
 - **`AuthenticationError`**: Invalid credentials or authentication failures
 - **`ValidationError`**: Invalid input parameters (customer ID, dates, etc.)
 - **`APIError`**: Google Ads API errors (after retries)
-- **`DataProcessingError`**: DataFrame conversion or data processing failures
+- **`DataProcessingError`**: Data processing or validation failures
 - **`ConfigurationError`**: Configuration file or setup issues
 
 ### Error Handling Pattern

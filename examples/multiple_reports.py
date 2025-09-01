@@ -12,7 +12,8 @@ from dotenv import load_dotenv
 
 from google_ads_reports import (
     GAdsReport, GAdsReportModel, load_credentials, setup_logging,
-    create_output_directory, format_report_filename
+    create_output_directory, format_report_filename, save_report_to_csv,
+    get_records_info
 )
 
 
@@ -55,11 +56,13 @@ def extract_multiple_reports():
             logging.info(f"Extracting {report_name}...")
 
             # Extract the data
-            df = gads_client.get_gads_report(customer_id, report_model,
-                                             start_date, end_date,
-                                             filter_zero_impressions=True)
+            response_data = gads_client.get_gads_report(
+                customer_id, report_model,
+                start_date, end_date,
+                filter_zero_impressions=True
+            )
 
-            if df.empty:
+            if not response_data:  # Check if data is empty
                 logging.warning(f"{report_name} returned no data")
                 results[report_name] = {"status": "empty", "rows": 0}
                 continue
@@ -74,16 +77,17 @@ def extract_multiple_reports():
 
             # Save to file
             file_path = output_dir / filename
-            df.to_csv(file_path, index=False)
+            save_report_to_csv(response_data, str(file_path))
 
+            info = get_records_info(response_data)
             results[report_name] = {
                 "status": "success",
-                "rows": len(df),
-                "columns": len(df.columns),
+                "rows": info['shape'][0],
+                "columns": info['shape'][1],
                 "file": str(file_path)
             }
 
-            logging.info(f"✅ {report_name}: {len(df)} rows saved to {filename}")
+            logging.info(f"✅ {report_name}: {info['shape'][0]} rows saved to {filename}")
 
         except Exception as e:
             logging.error(f"❌ Error extracting {report_name}: {e}")

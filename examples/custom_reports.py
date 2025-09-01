@@ -7,7 +7,10 @@ and use them with the Google Ads driver.
 import logging
 from datetime import date, timedelta
 
-from google_ads_reports import GAdsReport, create_custom_report, load_credentials, setup_logging
+from google_ads_reports import (
+    GAdsReport, create_custom_report, load_credentials, setup_logging,
+    save_report_to_csv, get_records_info
+)
 
 
 def create_campaign_performance_report():
@@ -103,7 +106,7 @@ def main():
             logging.info(f"Running {report_title} report...")
 
             # Extract the data
-            df = gads_client.get_gads_report(
+            response_data = gads_client.get_gads_report(
                 customer_id=customer_id,
                 report_model=report_model,
                 start_date=start_date,
@@ -112,12 +115,13 @@ def main():
 
             # Save the results
             filename = f"custom_{report_model['report_name']}_{start_date}_{end_date}.csv"
-            df.to_csv(filename, index=False)
+            save_report_to_csv(response_data, filename)
 
+            info = get_records_info(response_data)
             print(f"\n{report_title} Report:")
             print(f"- Report Name: {report_model['report_name']}")
-            print(f"- Rows: {len(df)}")
-            print(f"- Columns: {len(df.columns)}")
+            print(f"- Rows: {info['shape'][0]}")
+            print(f"- Columns: {info['shape'][1]}")
             print(f"- File: {filename}")
             print(f"- Fields: {len(report_model['select'])} selected")
 
@@ -125,17 +129,19 @@ def main():
                 print(f"- Filter: {report_model['where']}")
 
             # Show top performing items (first 5 rows)
-            if not df.empty:
+            if response_data:  # Check if data is not empty
                 print("- Top 5 results:")
-                for i, row in df.head().iterrows():
-                    if 'campaign_name' in df.columns:
+                first_records = response_data[:5]
+
+                for i, record in enumerate(first_records, 1):
+                    if 'campaign_name' in info['columns']:
                         name_col = 'campaign_name'
-                    elif 'ad_group_name' in df.columns:
+                    elif 'ad_group_name' in info['columns']:
                         name_col = 'ad_group_name'
                     else:
-                        name_col = df.columns[1] if len(df.columns) > 1 else df.columns[0]
+                        name_col = info['columns'][1] if len(info['columns']) > 1 else info['columns'][0]
 
-                    print(f"  {i+1}. {row.get(name_col, 'N/A')}")
+                    print(f"  {i}. {record.get(name_col, 'N/A')}")
 
             print("-" * 50)
 

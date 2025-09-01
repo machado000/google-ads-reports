@@ -1,14 +1,17 @@
 """
 Utility functions for the Google Ads driver module.
 """
-import calendar
 import logging
+import calendar
+import csv
+import json
 import os
 import yaml
 
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Optional
+
 from .exceptions import ConfigurationError, ValidationError
 
 
@@ -181,3 +184,111 @@ def format_report_filename(report_name: str, customer_id: str,
     safe_customer_id = validate_customer_id(customer_id)
 
     return f"{safe_report_name}_{safe_customer_id}_{start_date}_{end_date}.{file_extension}"
+
+
+def save_report_to_csv(data: list[dict[str, Any]], filepath: str) -> str:
+    """
+    Save report data to CSV file.
+
+    Parameters:
+    - data: List of dictionaries containing report data
+    - filepath: Path where to save the CSV file
+
+    Returns:
+    - str: Full path of the saved CSV file
+
+    Raises:
+    - ConfigurationError: If CSV writing fails
+    """
+    try:
+        # Add .csv extension if not present
+        if not filepath.endswith('.csv'):
+            filepath += '.csv'
+
+        if not data:
+            logging.warning("No data to save to CSV")
+            # Create empty CSV file
+            with open(filepath, 'w', newline='', encoding='utf-8') as csvfile:
+                csvfile.write('')
+            return filepath
+
+        # Get all unique keys from all dictionaries to use as fieldnames
+        fieldnames_set: set[str] = set()
+        for row in data:
+            fieldnames_set.update(row.keys())
+        fieldnames = sorted(list(fieldnames_set))
+
+        # Write to CSV
+        with open(filepath, 'w', newline='', encoding='utf-8') as csvfile:
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(data)
+
+        logging.debug(f"Successfully saved {len(data)} rows to {filepath}")
+        return filepath
+
+    except Exception as e:
+        raise ConfigurationError("Failed to save CSV file:", original_error=e) from e
+
+
+def save_report_to_json(data: list[dict[str, Any]], filepath: str, indent: int = 2) -> str:
+    """
+    Save report data to JSON file.
+
+    Parameters:
+    - data: List of dictionaries containing report data
+    - filepath: Path where to save the JSON file
+    - indent: JSON indentation level (default: 2)
+
+    Returns:
+    - str: Full path of the saved JSON file
+
+    Raises:
+    - ConfigurationError: If JSON writing fails
+    """
+    try:
+        # Add .json extension if not present
+        if not filepath.endswith('.json'):
+            filepath += '.json'
+
+        # Write to JSON
+        with open(filepath, 'w', encoding='utf-8') as jsonfile:
+            json.dump(data, jsonfile, indent=indent, ensure_ascii=False, default=str)
+
+        logging.debug(f"Successfully saved {len(data)} rows to {filepath}")
+        return filepath
+
+    except Exception as e:
+        raise ConfigurationError("Failed to save JSON file:", original_error=e) from e
+
+
+# ============================================================================
+# List of Dictionaries Utility Functions (replacing DataFrame operations)
+# ============================================================================
+
+def get_records_info(records: list[dict[str, Any]]) -> dict[str, Any]:
+    """
+    Get essential information about the records dataset.
+
+    Args:
+        records: List of dictionary records
+
+    Returns:
+        dict[str, Any]: Dataset information with:
+            - shape: tuple of (rows, columns)
+            - columns: list of column names
+    """
+    if not records:
+        return {"shape": (0, 0), "columns": []}
+
+    # Get all unique column names
+    all_columns: set[str] = set()
+    for record in records:
+        all_columns.update(record.keys())
+
+    columns = sorted(list(all_columns))
+
+    return {
+        "shape": (len(records), len(columns)),
+        "columns": columns
+    }
