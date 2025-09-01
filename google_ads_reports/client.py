@@ -169,9 +169,9 @@ class GAdsReport:
         result_records = self._convert_response_to_records(response, report_model)
 
         if result_records:
-
             # Filter out rows with zero impressions (configurable behavior)
-            if filter_zero_impressions:
+            # Only apply filtering if the data contains impression metrics
+            if filter_zero_impressions and result_records and "metrics.impressions" in result_records[0]:
                 original_count = len(result_records)
                 result_records = [
                     record for record in result_records
@@ -180,6 +180,9 @@ class GAdsReport:
                 removed_rows = original_count - len(result_records)
                 if removed_rows > 0:
                     logging.info(f"Filtered out {removed_rows} rows with zero impressions.")
+
+            elif filter_zero_impressions:
+                logging.info("Skipping zero impressions filter: no 'metrics.impressions' column found in data.")
 
             # Handle missing values for database compatibility
             # result_records = self._handle_missing_values(result_records, fill_object_values="")
